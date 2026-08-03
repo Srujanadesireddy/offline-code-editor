@@ -1,16 +1,146 @@
-# React + Vite
+# Offline-First Collaborative Code Editor
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A VS Code-inspired collaborative code editor built using React, Vite, Monaco Editor, and Tailwind CSS. This project is designed to support offline development and collaborative editing in future phases.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🚀 Features
 
-## React Compiler
+- VS Code-inspired UI
+- Monaco Code Editor
+- File Explorer
+- File Tabs
+- Breadcrumb Navigation
+- Search Panel
+- Settings Panel
+- Profile Panel
+- Activity Bar
+- Status Bar
+- Context Menu
+- Auto Save
+- Online/Offline Status Indicator
+- Toast Notifications
+- Local Storage Support
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## 🛠️ Tech Stack
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Frontend
+
+- React
+- Vite
+- Tailwind CSS
+- Monaco Editor
+- Lucide React
+- React Hot Toast
+
+### Backend (Coming Soon)
+
+- Express.js
+- MongoDB Atlas
+- JWT Authentication
+- REST API
+
+---
+
+## 📦 Installation
+
+Clone the repository:
+
+```bash
+git clone <repository-url>
+```
+
+Move into the client folder:
+
+```bash
+cd client
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+Open your browser:
+
+```
+http://localhost:5173
+```
+
+---
+
+## 📁 Project Structure
+
+```
+client
+│
+├── public
+├── src
+│   ├── components
+│   ├── context
+│   ├── pages
+│   ├── App.jsx
+│   └── main.jsx
+│
+├── package.json
+├── vite.config.js
+└── README.md
+```
+
+---
+
+## 📌 Current Progress
+
+### ✅ Frontend Completed
+
+- Authentication UI
+- Dashboard
+- Monaco Editor
+- Explorer
+- File Tabs
+- Breadcrumb
+- Search Panel
+- Settings Panel
+- Profile Panel
+- Activity Bar
+- Status Bar
+- Auto Save
+- Network Status
+- Toast Notifications
+
+### 🚧 Backend (Upcoming)
+
+- Express.js
+- MongoDB Atlas
+- JWT Authentication
+- User Authentication
+- Project CRUD
+- File CRUD
+
+### 🚧 Offline Features (Upcoming)
+
+- IndexedDB
+- Offline Sync
+- Conflict Resolution
+- Version History
+
+---
+
+## 👥 Team Project
+
+This project is being developed as an academic team project.
+
+---
+
+## 📜 License
+
+This project is intended for educational purposes.
