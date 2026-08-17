@@ -3,77 +3,64 @@ import toast from "react-hot-toast";
 
 const EditorContext = createContext();
 
-const initialExplorer = [
-    {
-        id: "src",
-        name: "src",
-        type: "folder",
-        children: [
-            {
-                id: "app",
-                name: "App.jsx",
-                type: "file",
-            },
-            {
-                id: "main",
-                name: "main.jsx",
-                type: "file",
-            },
-            {
-                id: "css",
-                name: "index.css",
-                type: "file",
-            },
-        ],
-    },
-    {
-        id: "public",
-        name: "public",
-        type: "folder",
-        children: [
-            {
-                id: "vite",
-                name: "vite.svg",
-                type: "file",
-            },
-        ],
-    },
-];
-
 export function EditorProvider({ children }) {
-    const [activeFile, setActiveFile] = useState("App.jsx");
+    const [activeFile, setActiveFile] = useState("");
     const [saveStatus, setSaveStatus] = useState("Saved");
-    const [openTabs, setOpenTabs] = useState(["App.jsx"]);
-    const [explorer, setExplorer] = useState(() => {
-        const saved = localStorage.getItem("explorer");
+    const [openTabs, setOpenTabs] = useState([]);
+    const [explorer, setExplorer] = useState([]);
 
-        return saved ? JSON.parse(saved) : initialExplorer;
-    });
-
-    useEffect(() => {
-        localStorage.setItem(
-            "explorer",
-            JSON.stringify(explorer)
-        );
-    }, [explorer]);
-    const [files, setFiles] = useState({
-        "App.jsx": `function App() {
-  return <h1>App Component</h1>;
-}`,
-        "main.jsx": `import React from "react";
-import ReactDOM from "react-dom/client";`,
-        "index.css": `body {
-  margin: 0;
-}`,
-    });
+    const [files, setFiles] = useState({});
     const [dirtyFiles, setDirtyFiles] = useState([]);
 
-    const openFile = (fileName) => {
-        if (!openTabs.includes(fileName)) {
-            setOpenTabs((prev) => [...prev, fileName]);
+    const openFile = async (file) => {
+        if (!file) return;
+
+        // Already loaded
+        if (files[file.name] !== undefined) {
+            if (!openTabs.includes(file.name)) {
+                setOpenTabs((prev) => [...prev, file.name]);
+            }
+
+            setActiveFile(file.name);
+            return;
         }
 
-        setActiveFile(fileName);
+        try {
+            const token = localStorage.getItem("token");
+
+            const response = await fetch(
+                `http://localhost:5000/api/files/single/${file.id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            const data = await response.json();
+
+            if (!data.success) {
+                toast.error("Unable to open file");
+                return;
+            }
+
+            setFiles((prev) => ({
+                ...prev,
+                [data.file.name]: data.file.content || "",
+            }));
+
+            setOpenTabs((prev) =>
+                prev.includes(data.file.name)
+                    ? prev
+                    : [...prev, data.file.name]
+            );
+
+            setActiveFile(data.file.name);
+
+        } catch (err) {
+            toast.error("Failed to load file");
+            console.error(err);
+        }
     };
 
     const addNode = (tree, parentName, newNode) => {
@@ -125,101 +112,216 @@ import ReactDOM from "react-dom/client";`,
         });
     };
 
-    const createNewFile = (folder) => {
+    const createNewFile = async (folder) => {
         const fileName = prompt("Enter file name:");
 
         if (!fileName) return;
 
-        if (files[fileName]) {
-            toast.error("File already exists!");
-            return;
-        }
+        const projectId = window.location.pathname.split("/").pop();
 
-        setFiles((prev) => ({
-            ...prev,
-            [fileName]: "",
-        }));
+        const token = localStorage.getItem("token");
 
-        setExplorer((prev) =>
-            addNode(
-                prev,
-                folder?.type === "folder"
-                    ? folder.name
-                    : "src",
+        try {
+
+            const response = await fetch(
+                "http://localhost:5000/api/files",
                 {
-                    id: crypto.randomUUID(),
-                    name: fileName,
-                    type: "file",
-                })
-        );
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        name: fileName,
+                        language: "javascript",
+                        projectId,
+                    }),
+                }
+            );
 
-        setOpenTabs((prev) => [...prev, fileName]);
+            const data = await response.json();
 
-        setActiveFile(fileName);
+            if (!data.success) {
+                toast.error(data.message);
+                return;
+            }
 
-        toast.success("File created successfully");
-    };
+            setFiles((prev) => ({
+                ...prev,
+                [data.file.name]: "",
+            }));
 
-    const deleteFile = (fileName) => {
-        // Remove from files
-        setFiles((prev) => {
-            const updated = { ...prev };
-            delete updated[fileName];
-            return updated;
-        });
+            setExplorer((prev) => [
+                {
+                    ...prev[0],
+                    children: [
+                        ...prev[0].children,
+                        {
+                            id: data.file._id,
+                            name: data.file.name,
+                            type: "file",
+                        },
+                    ],
+                },
+            ]);
 
-        // Remove from explorer
-        setExplorer((prev) =>
-            deleteNode(prev, fileName)
-        );
+            setOpenTabs((prev) => [
+                ...prev,
+                data.file.name,
+            ]);
 
-        // Remove from tabs
-        setOpenTabs((prev) =>
-            prev.filter((tab) => tab !== fileName)
-        );
+            setActiveFile(data.file.name);
 
-        // If deleted file was active, switch to App.jsx
-        if (activeFile === fileName) {
-            setActiveFile("App.jsx");
+            toast.success("File created");
+
+        } catch (err) {
+            console.log(err);
+            toast.error("Server Error");
         }
-        toast.success("Deleted successfully");
     };
 
-    const renameFile = (oldName, newName) => {
+    const deleteFile = async (fileName) => {
+        const projectFolder = explorer[0];
+
+        if (!projectFolder) return;
+
+        const file = projectFolder.children.find(
+            (f) => f.name === fileName
+        );
+
+        if (!file) return;
+
+        const token = localStorage.getItem("token");
+
+        try {
+            const response = await fetch(
+                `http://localhost:5000/api/files/${file.id}`,
+                {
+                    method: "DELETE",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            const data = await response.json();
+
+            if (!data.success) {
+                toast.error(data.message || "Delete failed");
+                return;
+            }
+
+            setFiles((prev) => {
+                const updated = { ...prev };
+                delete updated[fileName];
+                return updated;
+            });
+
+            setExplorer((prev) =>
+                deleteNode(prev, fileName)
+            );
+
+            setOpenTabs((prev) =>
+                prev.filter((tab) => tab !== fileName)
+            );
+
+            if (activeFile === fileName) {
+                setActiveFile("");
+            }
+
+            setDirtyFiles((prev) =>
+                prev.filter((file) => file !== fileName)
+            );
+
+            toast.success("File deleted");
+
+        } catch (error) {
+            console.error(error);
+            toast.error("Server Error");
+        }
+    };
+
+    const renameFile = async (oldName, newName) => {
         if (!newName || oldName === newName) return;
 
-        // Prevent duplicate names
-        if (files[newName]) {
+        const projectFolder = explorer[0];
+
+        if (!projectFolder) return;
+
+        const file = projectFolder.children.find(
+            (f) => f.name === oldName
+        );
+
+        if (!file) return;
+
+        if (projectFolder.children.some(
+            (f) => f.name === newName
+        )) {
             toast.error("A file with this name already exists!");
             return;
         }
 
-        // Rename in files
-        setFiles((prev) => {
-            const updated = { ...prev };
-            updated[newName] = updated[oldName];
-            delete updated[oldName];
-            return updated;
-        });
+        try {
+            const token = localStorage.getItem("token");
 
-        // Rename in explorer
-        setExplorer((prev) =>
-            renameNode(prev, oldName, newName)
-        );
+            const response = await fetch(
+                `http://localhost:5000/api/files/${file.id}/rename`,
+                {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        name: newName,
+                    }),
+                }
+            );
 
-        // Rename in open tabs
-        setOpenTabs((prev) =>
-            prev.map((tab) => (tab === oldName ? newName : tab))
-        );
+            const data = await response.json();
 
-        // Update active file
-        if (activeFile === oldName) {
-            setActiveFile(newName);
+            if (!data.success) {
+                toast.error(data.message || "Rename failed");
+                return;
+            }
+
+            setFiles((prev) => {
+                const updated = { ...prev };
+
+                updated[newName] = updated[oldName];
+
+                delete updated[oldName];
+
+                return updated;
+            });
+
+            setExplorer((prev) =>
+                renameNode(prev, oldName, newName)
+            );
+
+            setOpenTabs((prev) =>
+                prev.map((tab) =>
+                    tab === oldName ? newName : tab
+                )
+            );
+
+            if (activeFile === oldName) {
+                setActiveFile(newName);
+            }
+
+            setDirtyFiles((prev) =>
+                prev.map((file) =>
+                    file === oldName ? newName : file
+                )
+            );
+
+            toast.success("File renamed");
+
+        } catch (error) {
+            console.error(error);
+            toast.error("Server Error");
         }
-
-        toast.success("Renamed successfully");
     };
-
     const createNewFolder = (folder) => {
         const folderName = prompt("Folder name");
 

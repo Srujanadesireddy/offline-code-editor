@@ -21,7 +21,7 @@ function App() {
         />
 
         <Route
-          path="/editor"
+          path="/editor/:projectId"
           element={
             <ProtectedRoute>
               <Editor />

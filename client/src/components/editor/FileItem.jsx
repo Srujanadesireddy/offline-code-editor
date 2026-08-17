@@ -3,6 +3,7 @@ import { FileCode, Folder, FolderOpen } from "lucide-react";
 import { useEditor } from "../../context/EditorContext";
 
 function FileItem({ item, handleRightClick }) {
+  // console.log("Rendering Item:", item);
   const { activeFile, openFile } = useEditor();
   const [expanded, setExpanded] = useState(true);
 
@@ -12,18 +13,20 @@ function FileItem({ item, handleRightClick }) {
     <div className="ml-2">
       <div
         onClick={() => {
+
+          // console.log("Clicked Item:", item);
+
           if (isFolder) {
             setExpanded(!expanded);
           } else {
-            openFile(item.name);
+            openFile(item);
           }
         }}
         onContextMenu={(e) => handleRightClick(e, item)}
-        className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer transition ${
-          activeFile === item.name
+        className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer transition ${activeFile === item.name
             ? "bg-blue-600 text-white"
             : "text-slate-300 hover:bg-slate-700 hover:text-white"
-        }`}
+          }`}
       >
         {isFolder ? (
           expanded ? (

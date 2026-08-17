@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import Navbar from "../components/dashboard/Navbar";
 import WelcomeCard from "../components/dashboard/WelcomeCard";
 import NewProjectCard from "../components/dashboard/NewProjectCard";
@@ -5,6 +7,33 @@ import ProjectCard from "../components/dashboard/ProjectCard";
 import Sidebar from "../components/dashboard/Sidebar";
 
 function Dashboard() {
+  const [projects, setProjects] = useState([]);
+
+  useEffect(() => {
+
+    const fetchProjects = async () => {
+
+      const token = localStorage.getItem("token");
+
+      const response = await fetch("http://localhost:5000/api/projects", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      console.log(data);
+
+      if (data.success) {
+        setProjects(data.projects);
+      }
+    };
+
+    fetchProjects();
+
+  }, []);
+
   return (
     <div className="flex min-h-screen bg-slate-950">
 
@@ -24,20 +53,14 @@ function Dashboard() {
             Recent Projects
           </h2>
 
-          <ProjectCard
-            projectName="ResumeCraft"
-            lastEdited="Today"
-          />
-
-          <ProjectCard
-            projectName="Portfolio"
-            lastEdited="Yesterday"
-          />
-
-          <ProjectCard
-            projectName="DSA.java"
-            lastEdited="2 days ago"
-          />
+          {projects.map((project) => (
+            <ProjectCard
+              key={project._id}
+              projectId={project._id}
+              projectName={project.name}
+              lastEdited={new Date(project.updatedAt).toLocaleDateString()}
+            />
+          ))}
 
         </div>
 

@@ -1,6 +1,39 @@
 import { Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 function NewProjectCard() {
+
+  const navigate = useNavigate();
+
+  const createProject = async () => {
+
+    const name = prompt("Enter Project Name");
+
+    if (!name) return;
+
+    const token = localStorage.getItem("token");
+
+    const response = await fetch("http://localhost:5000/api/projects", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name,
+        description: "",
+      }),
+    });
+
+    const data = await response.json();
+
+    console.log(data);
+
+    if (data.success) {
+      window.location.reload();
+    }
+  };
+
   return (
     <div className="mt-8">
 
@@ -21,7 +54,10 @@ function NewProjectCard() {
           team in seconds.
         </p>
 
-        <button className="mt-8 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white px-8 py-3 rounded-xl font-semibold transition-all duration-300 hover:scale-105">
+        <button
+          onClick={createProject}
+          className="mt-8 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white px-8 py-3 rounded-xl font-semibold transition-all duration-300 hover:scale-105"
+        >
           + Create Project
         </button>
 

@@ -1,5 +1,41 @@
-import { FolderKanban } from "lucide-react";
-function ProjectCard({ projectName, lastEdited }) {
+import { FolderKanban, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+function ProjectCard({ projectId, projectName, lastEdited }) {
+  const navigate = useNavigate();
+
+  const openProject = () => {
+    navigate(`/editor/${projectId}`);
+  };
+
+  const deleteProject = async () => {
+
+    const confirmDelete = window.confirm(
+      "Delete this project?"
+    );
+
+    if (!confirmDelete) return;
+
+    const token = localStorage.getItem("token");
+
+    const response = await fetch(
+      `http://localhost:5000/api/projects/${projectId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    console.log(data);
+
+    if (data.success) {
+      window.location.reload();
+    }
+  };
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
 
@@ -33,13 +69,27 @@ function ProjectCard({ projectName, lastEdited }) {
 
         </div>
 
-        <button className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition">
-          Open →
-        </button>
+        <div className="flex gap-3">
+
+          <button
+            onClick={deleteProject}
+            className="p-2 rounded-xl bg-red-600 hover:bg-red-700 transition"
+          >
+            <Trash2 size={18} className="text-white" />
+          </button>
+
+          <button
+            onClick={openProject}
+            className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition"
+          >
+            Open →
+          </button>
+
+        </div>
 
       </div>
     </div>
   );
 }
 
-      export default ProjectCard;
+export default ProjectCard;

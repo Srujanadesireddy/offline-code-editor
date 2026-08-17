@@ -5,15 +5,14 @@ const authMiddleware = require("../middleware/authMiddleware");
 
 const {
     createProject,
-} = require("../controllers/projectController");
+    getProjects,
+    deleteProject,
+} = require("../controllers/projectController"); 
 
-router.get("/", (req, res) => {
-    res.json({
-        success: true,
-        message: "Project route working",
-    });
-});
+router.get("/", authMiddleware, getProjects);
 
 router.post("/", authMiddleware, createProject);
+
+router.delete("/:id", authMiddleware, deleteProject);
 
 module.exports = router;
