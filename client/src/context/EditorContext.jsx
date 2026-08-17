@@ -117,11 +117,14 @@ export function EditorProvider({ children }) {
 
         if (!fileName) return;
 
-        const projectId = window.location.pathname.split("/").pop();
-
-        const token = localStorage.getItem("token");
-
         try {
+            const token = localStorage.getItem("token");
+            const projectId = window.location.pathname.split("/").pop();
+
+            const folderId =
+                folder?.type === "folder" && folder.id !== "root"
+                    ? folder.id
+                    : null;
 
             const response = await fetch(
                 "http://localhost:5000/api/files",
@@ -135,6 +138,7 @@ export function EditorProvider({ children }) {
                         name: fileName,
                         language: "javascript",
                         projectId,
+                        folderId,
                     }),
                 }
             );
@@ -142,40 +146,61 @@ export function EditorProvider({ children }) {
             const data = await response.json();
 
             if (!data.success) {
-                toast.error(data.message);
+                toast.error(data.message || "Failed to create file");
                 return;
             }
+
+            const newFile = {
+                id: data.file._id,
+                name: data.file.name,
+                type: "file",
+            };
 
             setFiles((prev) => ({
                 ...prev,
                 [data.file.name]: "",
             }));
 
-            setExplorer((prev) => [
-                {
-                    ...prev[0],
-                    children: [
-                        ...prev[0].children,
-                        {
-                            id: data.file._id,
-                            name: data.file.name,
-                            type: "file",
-                        },
-                    ],
-                },
-            ]);
+            setExplorer((prev) => {
 
-            setOpenTabs((prev) => [
-                ...prev,
-                data.file.name,
-            ]);
+                const addFile = (nodes) =>
+                    nodes.map((node) => {
+
+                        if (node.id === (folder?.id || "root")) {
+                            return {
+                                ...node,
+                                children: [
+                                    ...(node.children || []),
+                                    newFile,
+                                ],
+                            };
+                        }
+
+                        if (node.children) {
+                            return {
+                                ...node,
+                                children: addFile(node.children),
+                            };
+                        }
+
+                        return node;
+                    });
+
+                return addFile(prev);
+            });
+
+            setOpenTabs((prev) =>
+                prev.includes(data.file.name)
+                    ? prev
+                    : [...prev, data.file.name]
+            );
 
             setActiveFile(data.file.name);
 
             toast.success("File created");
 
-        } catch (err) {
-            console.log(err);
+        } catch (error) {
+            console.error("Create file error:", error);
             toast.error("Server Error");
         }
     };
@@ -322,27 +347,324 @@ export function EditorProvider({ children }) {
             toast.error("Server Error");
         }
     };
-    const createNewFolder = (folder) => {
+    const createNewFolder = async (folder) => {
         const folderName = prompt("Folder name");
 
         if (!folderName) return;
 
-        setExplorer((prev) =>
-            addNode(
-                prev,
-                folder?.type === "folder"
-                    ? folder.name
-                    : "src",
+        try {
+            const token = localStorage.getItem("token");
+
+            // Get project ID from current editor URL
+            const projectId = window.location.pathname.split("/").pop();
+
+            // Parent folder ID
+            const parent =
+                folder?.type === "folder" && folder.id !== "root"
+                    ? folder.id
+                    : null;
+
+            const response = await fetch(
+                "http://localhost:5000/api/folders",
                 {
-                    id: crypto.randomUUID(),
-                    name: folderName,
-                    type: "folder",
-                    children: [],
-                })
-        );
-        toast.success("Folder created successfully");
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        name: folderName,
+                        projectId,
+                        parent,
+                    }),
+                }
+            );
+
+            const data = await response.json();
+
+            if (!data.success) {
+                toast.error(data.message || "Failed to create folder");
+                return;
+            }
+
+            const newFolder = {
+                id: data.folder._id,
+                name: data.folder.name,
+                type: "folder",
+                children: [],
+            };
+
+            setExplorer((prev) => {
+
+                const addFolder = (nodes) => {
+                    return nodes.map((node) => {
+
+                        if (
+                            folder &&
+                            node.id === folder.id
+                        ) {
+                            return {
+                                ...node,
+                                children: [
+                                    ...(node.children || []),
+                                    newFolder,
+                                ],
+                            };
+                        }
+
+                        if (node.children) {
+                            return {
+                                ...node,
+                                children: addFolder(node.children),
+                            };
+                        }
+
+                        return node;
+                    });
+                };
+
+                // No parent → add to Project root
+                if (!folder || folder.id === "root") {
+                    return prev.map((root) => ({
+                        ...root,
+                        children: [
+                            ...(root.children || []),
+                            newFolder,
+                        ],
+                    }));
+                }
+
+                return addFolder(prev);
+            });
+
+            toast.success("Folder created");
+
+        } catch (error) {
+            console.error("Create folder error:", error);
+            toast.error("Server Error");
+        }
     };
 
+
+    const renameFolder = async (folder, newName) => {
+        if (!folder || !newName || folder.name === newName) {
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem("token");
+
+            const response = await fetch(
+                `http://localhost:5000/api/folders/${folder.id}/rename`,
+                {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        name: newName,
+                    }),
+                }
+            );
+
+            const data = await response.json();
+
+            if (!data.success) {
+                toast.error(data.message || "Rename failed");
+                return;
+            }
+
+            const renameFolderNode = (nodes) =>
+                nodes.map((node) => {
+                    if (node.id === folder.id) {
+                        return {
+                            ...node,
+                            name: newName,
+                        };
+                    }
+
+                    if (node.children) {
+                        return {
+                            ...node,
+                            children: renameFolderNode(
+                                node.children
+                            ),
+                        };
+                    }
+
+                    return node;
+                });
+
+            setExplorer(renameFolderNode(explorer));
+
+            toast.success("Folder renamed");
+
+        } catch (error) {
+            console.error(error);
+            toast.error("Server Error");
+        }
+    };
+
+
+    const deleteFolder = async (folder) => {
+        if (!folder) return;
+
+        try {
+            const token = localStorage.getItem("token");
+
+            const response = await fetch(
+                `http://localhost:5000/api/folders/${folder.id}`,
+                {
+                    method: "DELETE",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            const data = await response.json();
+
+            if (!data.success) {
+                toast.error(data.message || "Delete failed");
+                return;
+            }
+
+            const removeFolder = (nodes) =>
+                nodes
+                    .filter((node) => node.id !== folder.id)
+                    .map((node) => ({
+                        ...node,
+                        children: node.children
+                            ? removeFolder(node.children)
+                            : [],
+                    }));
+
+            setExplorer(removeFolder(explorer));
+
+            toast.success("Folder deleted");
+
+        } catch (error) {
+            console.error(error);
+            toast.error("Server Error");
+        }
+    };
+
+    const moveFile = async (file, targetFolder) => {
+        if (!file || !targetFolder) return;
+
+        try {
+            const token = localStorage.getItem("token");
+
+            const folderId =
+                targetFolder.id === "root"
+                    ? null
+                    : targetFolder.id;
+
+            const response = await fetch(
+                `http://localhost:5000/api/files/${file.id}/move`,
+                {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        folderId,
+                    }),
+                }
+            );
+
+            const data = await response.json();
+
+            if (!data.success) {
+                toast.error(data.message || "Move failed");
+                return;
+            }
+
+            // Remove file from EVERY location
+            const removeFileFromTree = (nodes) => {
+                return nodes.map((node) => ({
+                    ...node,
+                    children: node.children
+                        ? node.children
+                            .filter(
+                                (child) => child.id !== file.id
+                            )
+                            .map((child) => ({
+                                ...child,
+                                children: child.children
+                                    ? removeFileFromTree(
+                                        child.children
+                                    )
+                                    : [],
+                            }))
+                        : [],
+                }));
+            };
+
+            let updatedExplorer =
+                removeFileFromTree(explorer);
+
+            // Add file to destination
+            const addFileToFolder = (nodes) => {
+                return nodes.map((node) => {
+
+                    if (node.id === targetFolder.id) {
+                        return {
+                            ...node,
+                            children: [
+                                ...(node.children || []),
+                                {
+                                    id: file.id,
+                                    name: file.name,
+                                    type: "file",
+                                },
+                            ],
+                        };
+                    }
+
+                    if (node.children) {
+                        return {
+                            ...node,
+                            children: addFileToFolder(
+                                node.children
+                            ),
+                        };
+                    }
+
+                    return node;
+                });
+            };
+
+            if (targetFolder.id === "root") {
+                updatedExplorer = updatedExplorer.map(
+                    (root) => ({
+                        ...root,
+                        children: [
+                            ...(root.children || []),
+                            {
+                                id: file.id,
+                                name: file.name,
+                                type: "file",
+                            },
+                        ],
+                    })
+                );
+            } else {
+                updatedExplorer =
+                    addFileToFolder(updatedExplorer);
+            }
+
+            setExplorer(updatedExplorer);
+
+            toast.success("File moved");
+
+        } catch (error) {
+            console.error("Move file error:", error);
+            toast.error("Server Error");
+        }
+    };
 
     return (
         <EditorContext.Provider
@@ -364,6 +686,9 @@ export function EditorProvider({ children }) {
                 deleteFile,
                 renameFile,
                 createNewFolder,
+                renameFolder,
+                deleteFolder,
+                moveFile,
             }}
         >
             {children}

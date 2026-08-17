@@ -20,51 +20,131 @@ function Editor() {
   const [activePanel, setActivePanel] = useState("explorer");
 
   useEffect(() => {
+    const fetchProjectStructure = async () => {
+      try {
+        const token = localStorage.getItem("token");
 
-    const fetchFiles = async () => {
+        const [filesResponse, foldersResponse] = await Promise.all([
+          fetch(
+            `http://localhost:5000/api/files/${projectId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          ),
 
-      const token = localStorage.getItem("token");
+          fetch(
+            `http://localhost:5000/api/folders/${projectId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          ),
+        ]);
 
-      const response = await fetch(
-        `http://localhost:5000/api/files/${projectId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+        const filesData = await filesResponse.json();
+        const foldersData = await foldersResponse.json();
+
+        if (!filesData.success || !foldersData.success) {
+          console.error(
+            "Failed to load project structure"
+          );
+          return;
         }
-      );
 
-      const data = await response.json();
+        const root = {
+          id: "root",
+          name: "Project",
+          type: "folder",
+          children: [],
+        };
 
-      console.log(data);
+        // -------------------------
+        // Create folder nodes
+        // -------------------------
 
-      if (data.success) {
+        const folderMap = {};
 
-        const explorerData = [
-          {
-            id: "root",
-            name: "Project",
+        foldersData.folders.forEach((folder) => {
+          folderMap[folder._id] = {
+            id: folder._id,
+            name: folder.name,
             type: "folder",
             children: [],
-          },
-        ];
+          };
+        });
 
-        data.files.forEach((file) => {
-          explorerData[0].children.push({
+        // -------------------------
+        // Build folder hierarchy
+        // -------------------------
+
+        foldersData.folders.forEach((folder) => {
+          const currentFolder = folderMap[folder._id];
+
+          if (folder.parent) {
+            const parentFolder =
+              folderMap[folder.parent];
+
+            if (parentFolder) {
+              parentFolder.children.push(
+                currentFolder
+              );
+            }
+          } else {
+            root.children.push(
+              currentFolder
+            );
+          }
+        });
+
+        // -------------------------
+        // Add files to correct folder
+        // -------------------------
+
+        filesData.files.forEach((file) => {
+          const fileNode = {
             id: file._id,
             name: file.name,
             type: "file",
-          });
+          };
+
+          if (file.folder) {
+            const folderId =
+              file.folder.toString();
+
+            const parentFolder =
+              folderMap[folderId];
+
+            if (parentFolder) {
+              parentFolder.children.push(
+                fileNode
+              );
+            } else {
+              root.children.push(
+                fileNode
+              );
+            }
+          } else {
+            // Existing files without a folder
+            root.children.push(
+              fileNode
+            );
+          }
         });
 
-        setExplorer(explorerData);
+        setExplorer([root]);
 
+      } catch (error) {
+        console.error(
+          "Failed to load project structure:",
+          error
+        );
       }
-
     };
 
-    fetchFiles();
-
+    fetchProjectStructure();
   }, [projectId, setExplorer]);
 
   return (

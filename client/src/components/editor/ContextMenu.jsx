@@ -1,6 +1,8 @@
 import { useEditor } from "../../context/EditorContext";
+import toast from "react-hot-toast";
+
 function ContextMenu({ x, y, visible, item, onClose }) {
-    const { createNewFile, deleteFile, renameFile, createNewFolder } = useEditor();
+    const { createNewFile, deleteFile, renameFile, createNewFolder, renameFolder, deleteFolder, moveFile, explorer, } = useEditor();
 
     if (!visible) return null;
 
@@ -33,11 +35,19 @@ function ContextMenu({ x, y, visible, item, onClose }) {
                 onClick={() => {
                     if (!item) return;
 
-                    const newName = prompt("Enter new file name:", item.name);
+                    const newName = prompt(
+                        "Enter new name:",
+                        item.name
+                    );
 
                     if (!newName) return;
 
-                    renameFile(item.name, newName);
+                    if (item.type === "folder") {
+                        renameFolder(item, newName);
+                    } else {
+                        renameFile(item.name, newName);
+                    }
+
                     onClose();
                 }}
                 className="w-full text-left px-4 py-2 hover:bg-slate-700"
@@ -47,15 +57,71 @@ function ContextMenu({ x, y, visible, item, onClose }) {
 
             <button
                 onClick={() => {
-                    if (item) {
-                        deleteFile(item.name);
-                        onClose();
+                    if (!item || item.type !== "file") return;
+
+                    const folderName = prompt(
+                        "Enter destination folder name:"
+                    );
+
+                    if (!folderName) return;
+
+                    const findFolder = (nodes) => {
+                        for (const node of nodes) {
+                            if (
+                                node.type === "folder" &&
+                                node.name === folderName
+                            ) {
+                                return node;
+                            }
+
+                            if (node.children) {
+                                const found = findFolder(node.children);
+
+                                if (found) return found;
+                            }
+                        }
+
+                        return null;
+                    };
+
+                    const targetFolder = findFolder(explorer);
+
+                    if (!targetFolder) {
+                        toast.error("Folder not found");
+                        return;
                     }
+
+                    moveFile(item, targetFolder);
+                    onClose();
+                }}
+                className="w-full text-left px-4 py-2 hover:bg-slate-700"
+            >
+                📂 Move to Folder
+            </button>
+
+            <button
+                onClick={() => {
+                    if (!item) return;
+
+                    const confirmed = window.confirm(
+                        `Delete "${item.name}"?`
+                    );
+
+                    if (!confirmed) return;
+
+                    if (item.type === "folder") {
+                        deleteFolder(item);
+                    } else {
+                        deleteFile(item.name);
+                    }
+
+                    onClose();
                 }}
                 className="w-full text-left px-4 py-2 text-red-400 hover:bg-slate-700"
             >
                 🗑 Delete
             </button>
+
         </div>
     );
 }

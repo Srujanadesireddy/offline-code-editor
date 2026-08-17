@@ -3,7 +3,7 @@ const File = require("../models/File");
 exports.createFile = async (req, res) => {
   try {
 
-    const { name, language, projectId } = req.body;
+    const { name, language, projectId, folderId } = req.body;
 
     if (!name) {
       return res.status(400).json({
@@ -16,6 +16,7 @@ exports.createFile = async (req, res) => {
       name,
       language,
       project: projectId,
+      folder: folderId || null,
       content: "",
     });
 
@@ -87,97 +88,130 @@ exports.getFile = async (req, res) => {
 };
 
 exports.updateFile = async (req, res) => {
-    try {
+  try {
 
-        const { content } = req.body;
+    const { content } = req.body;
 
-        const file = await File.findByIdAndUpdate(
-            req.params.id,
-            { content },
-            { new: true }
-        );
+    const file = await File.findByIdAndUpdate(
+      req.params.id,
+      { content },
+      { new: true }
+    );
 
-        if (!file) {
-            return res.status(404).json({
-                success: false,
-                message: "File not found",
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            message: "File updated successfully",
-            file,
-        });
-
-    } catch (error) {
-
-        res.status(500).json({
-            success: false,
-            message: error.message,
-        });
-
+    if (!file) {
+      return res.status(404).json({
+        success: false,
+        message: "File not found",
+      });
     }
+
+    res.status(200).json({
+      success: true,
+      message: "File updated successfully",
+      file,
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+
+  }
 };
 
 exports.renameFile = async (req, res) => {
-    try {
-        const { name } = req.body;
+  try {
+    const { name } = req.body;
 
-        if (!name) {
-            return res.status(400).json({
-                success: false,
-                message: "File name is required",
-            });
-        }
-
-        const file = await File.findByIdAndUpdate(
-            req.params.id,
-            { name },
-            { new: true }
-        );
-
-        if (!file) {
-            return res.status(404).json({
-                success: false,
-                message: "File not found",
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            message: "File renamed successfully",
-            file,
-        });
-
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: error.message,
-        });
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "File name is required",
+      });
     }
+
+    const file = await File.findByIdAndUpdate(
+      req.params.id,
+      { name },
+      { new: true }
+    );
+
+    if (!file) {
+      return res.status(404).json({
+        success: false,
+        message: "File not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "File renamed successfully",
+      file,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
 exports.deleteFile = async (req, res) => {
-    try {
-        const file = await File.findByIdAndDelete(req.params.id);
+  try {
+    const file = await File.findByIdAndDelete(req.params.id);
 
-        if (!file) {
-            return res.status(404).json({
-                success: false,
-                message: "File not found",
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            message: "File deleted successfully",
-        });
-
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: error.message,
-        });
+    if (!file) {
+      return res.status(404).json({
+        success: false,
+        message: "File not found",
+      });
     }
+
+    res.status(200).json({
+      success: true,
+      message: "File deleted successfully",
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.moveFile = async (req, res) => {
+  try {
+    const { folderId } = req.body;
+
+    const file = await File.findByIdAndUpdate(
+      req.params.id,
+      {
+        folder: folderId || null,
+      },
+      { new: true }
+    );
+
+    if (!file) {
+      return res.status(404).json({
+        success: false,
+        message: "File not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "File moved successfully",
+      file,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };

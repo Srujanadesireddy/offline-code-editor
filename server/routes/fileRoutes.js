@@ -10,6 +10,7 @@ const {
     updateFile,
     renameFile,
     deleteFile,
+    moveFile,
 } = require("../controllers/fileController");
 
 router.post("/", authMiddleware, createFile);
@@ -19,6 +20,8 @@ router.get("/single/:id", authMiddleware, getFile);
 router.get("/:projectId", authMiddleware, getFiles);
 
 router.put("/:id/rename", authMiddleware, renameFile);
+
+router.put("/:id/move", authMiddleware, moveFile);
 
 router.put("/:id", authMiddleware, updateFile);
 
