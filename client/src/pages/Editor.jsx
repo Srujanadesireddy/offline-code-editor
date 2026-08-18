@@ -7,6 +7,9 @@ import EditorArea from "../components/editor/EditorArea";
 import StatusBar from "../components/editor/StatusBar";
 import ActivityBar from "../components/editor/ActivityBar";
 import SearchPanel from "../components/editor/SearchPanel";
+import GitPanel from "../components/editor/GitPanel";
+import RunPanel from "../components/editor/RunPanel";
+import DebugPanel from "../components/editor/DebugPanel";
 import SettingsPanel from "../components/editor/SettingsPanel";
 import ProfilePanel from "../components/editor/ProfilePanel";
 
@@ -163,23 +166,11 @@ function Editor() {
 
         {activePanel === "search" && <SearchPanel />}
 
-        {activePanel === "git" && (
-          <div className="w-72 bg-slate-900 text-white p-4">
-            🌿 Git Panel
-          </div>
-        )}
+        {activePanel === "git" && <GitPanel />}
 
-        {activePanel === "run" && (
-          <div className="w-72 bg-slate-900 text-white p-4">
-            ▶ Run Panel
-          </div>
-        )}
+        {activePanel === "run" && <RunPanel />}
 
-        {activePanel === "debug" && (
-          <div className="w-72 bg-slate-900 text-white p-4">
-            🐞 Debug Panel
-          </div>
-        )}
+        {activePanel === "debug" && <DebugPanel />}
 
         {activePanel === "settings" && <SettingsPanel />}
 
