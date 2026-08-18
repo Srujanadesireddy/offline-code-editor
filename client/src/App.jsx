@@ -11,6 +11,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
+import Settings from "./pages/Settings";
 import Editor from "./pages/Editor";
 
 function App() {
@@ -56,7 +57,19 @@ function App() {
         />
 
 
-        {/* Editor button without project */}
+        {/* Settings */}
+
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
+
+
+        {/* Editor without project */}
 
         <Route
           path="/editor"
