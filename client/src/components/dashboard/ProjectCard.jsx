@@ -1,86 +1,154 @@
-import { FolderKanban, Trash2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import {
+  FolderKanban,
+  Trash2,
+  Clock,
+} from "lucide-react";
 
-function ProjectCard({ projectId, projectName, lastEdited }) {
+import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+
+function ProjectCard({
+  project,
+  onDeleted,
+}) {
   const navigate = useNavigate();
 
+  if (!project) {
+    return null;
+  }
+
   const openProject = () => {
-    navigate(`/editor/${projectId}`);
+    navigate(`/editor/${project._id}`);
   };
 
   const deleteProject = async () => {
-
     const confirmDelete = window.confirm(
-      "Delete this project?"
+      `Delete "${project.name}"?\n\nThis will also delete its files and folders.`
     );
 
-    if (!confirmDelete) return;
+    if (!confirmDelete) {
+      return;
+    }
 
-    const token = localStorage.getItem("token");
+    try {
+      const token =
+        localStorage.getItem("token");
 
-    const response = await fetch(
-      `http://localhost:5000/api/projects/${projectId}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await fetch(
+        `http://localhost:5000/api/projects/${project._id}`,
+        {
+          method: "DELETE",
+
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !data.success
+      ) {
+        toast.error(
+          data.message ||
+            "Failed to delete project"
+        );
+
+        return;
       }
-    );
 
-    const data = await response.json();
+      toast.success(
+        "Project deleted successfully"
+      );
 
-    console.log(data);
+      onDeleted?.(project._id);
 
-    if (data.success) {
-      window.location.reload();
+    } catch (error) {
+      console.error(
+        "Delete project error:",
+        error
+      );
+
+      toast.error(
+        "Unable to delete project"
+      );
     }
   };
+
+  const lastEdited =
+    project.updatedAt
+      ? new Date(
+          project.updatedAt
+        ).toLocaleDateString()
+      : "Unknown";
+
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
 
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+
+        {/* Project Information */}
+
         <div className="flex items-center gap-4">
 
           <div className="bg-blue-100 p-3 rounded-xl">
-            <FolderKanban className="text-blue-600" size={24} />
+
+            <FolderKanban
+              size={24}
+              className="text-blue-600"
+            />
+
           </div>
 
           <div>
+
             <h3 className="text-xl font-bold text-slate-800">
-              {projectName}
+              {project.name}
             </h3>
 
-            <p className="text-slate-500">
+            <p className="text-slate-500 flex items-center gap-1 mt-1">
+
+              <Clock size={14} />
+
               Last edited: {lastEdited}
+
             </p>
 
-            <div className="flex gap-2 mt-2">
-              <span className="text-[11px] bg-slate-100 px-2 py-0.5 rounded-full">
-                React
-              </span>
-
-              <span className="text-[11px] bg-slate-100 px-2 py-0.5 rounded-full">
-                Tailwind
-              </span>
-            </div>
+            {project.description && (
+              <p className="text-sm text-slate-400 mt-1">
+                {project.description}
+              </p>
+            )}
 
           </div>
 
         </div>
 
-        <div className="flex gap-3">
+
+        {/* Actions */}
+
+        <div className="flex items-center gap-3">
 
           <button
             onClick={deleteProject}
+            title="Delete project"
             className="p-2 rounded-xl bg-red-600 hover:bg-red-700 transition"
           >
-            <Trash2 size={18} className="text-white" />
+
+            <Trash2
+              size={18}
+              className="text-white"
+            />
+
           </button>
+
 
           <button
             onClick={openProject}
-            className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition"
+            className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition"
           >
             Open →
           </button>
@@ -88,6 +156,7 @@ function ProjectCard({ projectId, projectName, lastEdited }) {
         </div>
 
       </div>
+
     </div>
   );
 }

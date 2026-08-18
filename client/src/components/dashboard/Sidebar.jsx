@@ -54,13 +54,13 @@ function Sidebar() {
         })}
       </nav>
 
-      {/* Footer */}
+      {/* Footer
       <div className="p-4 border-t border-slate-800">
         <button className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-slate-300 hover:bg-red-600 hover:text-white transition">
           <LogOut size={20} />
           Logout
         </button>
-      </div>
+      </div> */}
     </aside>
   );
 }

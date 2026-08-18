@@ -1,12 +1,12 @@
 const Project = require("../models/Project");
 const File = require("../models/File");
+const Folder = require("../models/Folder");
 
 exports.createProject = async (req, res) => {
     try {
-
         const { name, description } = req.body;
 
-        if (!name) {
+        if (!name || !name.trim()) {
             return res.status(400).json({
                 success: false,
                 message: "Project name is required",
@@ -14,12 +14,11 @@ exports.createProject = async (req, res) => {
         }
 
         const project = await Project.create({
-            name,
-            description,
+            name: name.trim(),
+            description: description || "",
             owner: req.user.id,
         });
 
-        // Create default project files
         await File.insertMany([
             {
                 name: "App.jsx",
@@ -63,21 +62,26 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         });
 
     } catch (error) {
+        console.error(
+            "Create project error:",
+            error
+        );
 
         res.status(500).json({
             success: false,
             message: error.message,
         });
-
     }
 };
 
+
 exports.getProjects = async (req, res) => {
     try {
-
         const projects = await Project.find({
             owner: req.user.id,
-        }).sort({ createdAt: -1 });
+        }).sort({
+            updatedAt: -1,
+        });
 
         res.status(200).json({
             success: true,
@@ -85,19 +89,22 @@ exports.getProjects = async (req, res) => {
         });
 
     } catch (error) {
+        console.error(
+            "Get projects error:",
+            error
+        );
 
         res.status(500).json({
             success: false,
             message: error.message,
         });
-
     }
 };
 
+
 exports.deleteProject = async (req, res) => {
     try {
-
-        const project = await Project.findOneAndDelete({
+        const project = await Project.findOne({
             _id: req.params.id,
             owner: req.user.id,
         });
@@ -109,17 +116,36 @@ exports.deleteProject = async (req, res) => {
             });
         }
 
+        // Delete all files belonging to the project
+        await File.deleteMany({
+            project: project._id,
+        });
+
+        // Delete all folders belonging to the project
+        await Folder.deleteMany({
+            project: project._id,
+        });
+
+        // Delete the project itself
+        await Project.deleteOne({
+            _id: project._id,
+        });
+
         res.status(200).json({
             success: true,
-            message: "Project deleted successfully",
+            message:
+                "Project and its files/folders deleted successfully",
         });
 
     } catch (error) {
+        console.error(
+            "Delete project error:",
+            error
+        );
 
         res.status(500).json({
             success: false,
             message: error.message,
         });
-
     }
 };
