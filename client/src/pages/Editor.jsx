@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useEditor } from "../context/EditorContext";
+
 import TopBar from "../components/editor/TopBar";
 import Explorer from "../components/editor/Explorer";
 import EditorArea from "../components/editor/EditorArea";
@@ -12,27 +13,36 @@ import RunPanel from "../components/editor/RunPanel";
 import DebugPanel from "../components/editor/DebugPanel";
 import SettingsPanel from "../components/editor/SettingsPanel";
 import ProfilePanel from "../components/editor/ProfilePanel";
+import TerminalPanel from "../components/editor/TerminalPanel";
 
 function Editor() {
   const { projectId } = useParams();
 
   const { setExplorer } = useEditor();
 
-  console.log("Project ID:", projectId);
+  const [activePanel, setActivePanel] =
+    useState("explorer");
 
-  const [activePanel, setActivePanel] = useState("explorer");
+  const [showTerminal, setShowTerminal] =
+    useState(false);
+
 
   useEffect(() => {
     const fetchProjectStructure = async () => {
       try {
-        const token = localStorage.getItem("token");
+        const token =
+          localStorage.getItem("token");
 
-        const [filesResponse, foldersResponse] = await Promise.all([
+        const [
+          filesResponse,
+          foldersResponse,
+        ] = await Promise.all([
           fetch(
             `http://localhost:5000/api/files/${projectId}`,
             {
               headers: {
-                Authorization: `Bearer ${token}`,
+                Authorization:
+                  `Bearer ${token}`,
               },
             }
           ),
@@ -41,21 +51,32 @@ function Editor() {
             `http://localhost:5000/api/folders/${projectId}`,
             {
               headers: {
-                Authorization: `Bearer ${token}`,
+                Authorization:
+                  `Bearer ${token}`,
               },
             }
           ),
         ]);
 
-        const filesData = await filesResponse.json();
-        const foldersData = await foldersResponse.json();
 
-        if (!filesData.success || !foldersData.success) {
+        const filesData =
+          await filesResponse.json();
+
+        const foldersData =
+          await foldersResponse.json();
+
+
+        if (
+          !filesData.success ||
+          !foldersData.success
+        ) {
           console.error(
             "Failed to load project structure"
           );
+
           return;
         }
+
 
         const root = {
           id: "root",
@@ -64,120 +85,240 @@ function Editor() {
           children: [],
         };
 
-        // -------------------------
-        // Create folder nodes
-        // -------------------------
+
+        /*
+         * Create folder nodes
+         */
 
         const folderMap = {};
 
-        foldersData.folders.forEach((folder) => {
-          folderMap[folder._id] = {
-            id: folder._id,
-            name: folder.name,
-            type: "folder",
-            children: [],
-          };
-        });
 
-        // -------------------------
-        // Build folder hierarchy
-        // -------------------------
+        foldersData.folders.forEach(
+          (folder) => {
+            folderMap[folder._id] = {
+              id: folder._id,
+              name: folder.name,
+              type: "folder",
+              children: [],
+            };
+          }
+        );
 
-        foldersData.folders.forEach((folder) => {
-          const currentFolder = folderMap[folder._id];
 
-          if (folder.parent) {
-            const parentFolder =
-              folderMap[folder.parent];
+        /*
+         * Build folder hierarchy
+         */
 
-            if (parentFolder) {
-              parentFolder.children.push(
+        foldersData.folders.forEach(
+          (folder) => {
+            const currentFolder =
+              folderMap[folder._id];
+
+            if (folder.parent) {
+
+              const parentFolder =
+                folderMap[
+                  folder.parent
+                ];
+
+              if (parentFolder) {
+                parentFolder.children.push(
+                  currentFolder
+                );
+              }
+
+            } else {
+
+              root.children.push(
                 currentFolder
               );
+
             }
-          } else {
-            root.children.push(
-              currentFolder
-            );
           }
-        });
+        );
 
-        // -------------------------
-        // Add files to correct folder
-        // -------------------------
 
-        filesData.files.forEach((file) => {
-          const fileNode = {
-            id: file._id,
-            name: file.name,
-            type: "file",
-          };
+        /*
+         * Add files
+         */
 
-          if (file.folder) {
-            const folderId =
-              file.folder.toString();
+        filesData.files.forEach(
+          (file) => {
 
-            const parentFolder =
-              folderMap[folderId];
+            const fileNode = {
+              id: file._id,
+              name: file.name,
+              type: "file",
+            };
 
-            if (parentFolder) {
-              parentFolder.children.push(
-                fileNode
-              );
+
+            if (file.folder) {
+
+              const folderId =
+                file.folder.toString();
+
+              const parentFolder =
+                folderMap[folderId];
+
+              if (parentFolder) {
+
+                parentFolder.children.push(
+                  fileNode
+                );
+
+              } else {
+
+                root.children.push(
+                  fileNode
+                );
+
+              }
+
             } else {
+
               root.children.push(
                 fileNode
               );
+
             }
-          } else {
-            // Existing files without a folder
-            root.children.push(
-              fileNode
-            );
+
           }
-        });
+        );
+
 
         setExplorer([root]);
 
       } catch (error) {
+
         console.error(
           "Failed to load project structure:",
           error
         );
+
       }
     };
 
+
     fetchProjectStructure();
+
   }, [projectId, setExplorer]);
+
+
+  const handlePanelChange = (
+    panel
+  ) => {
+
+    setShowTerminal(false);
+
+    setActivePanel(panel);
+
+  };
+
+
+  const handleTerminalToggle = () => {
+
+    setShowTerminal(
+      (prev) => !prev
+    );
+
+  };
+
 
   return (
     <div className="h-screen flex flex-col">
 
-      <TopBar />
+      <TopBar
+        activePanel={activePanel}
+        setActivePanel={
+          handlePanelChange
+        }
+        showTerminal={
+          showTerminal
+        }
+        setShowTerminal={
+          setShowTerminal
+        }
+        onTerminalToggle={
+          handleTerminalToggle
+        }
+      />
 
-      <div className="flex flex-1">
+
+      <div className="flex flex-1 min-h-0">
 
         <ActivityBar
-          activePanel={activePanel}
-          setActivePanel={setActivePanel}
+          activePanel={
+            activePanel
+          }
+          setActivePanel={
+            handlePanelChange
+          }
         />
 
-        {activePanel === "explorer" && <Explorer />}
 
-        {activePanel === "search" && <SearchPanel />}
+        {activePanel ===
+          "explorer" && (
+          <Explorer />
+        )}
 
-        {activePanel === "git" && <GitPanel />}
 
-        {activePanel === "run" && <RunPanel />}
+        {activePanel ===
+          "search" && (
+          <SearchPanel />
+        )}
 
-        {activePanel === "debug" && <DebugPanel />}
 
-        {activePanel === "settings" && <SettingsPanel />}
+        {activePanel ===
+          "git" && (
+          <GitPanel />
+        )}
 
-        {activePanel === "profile" && <ProfilePanel />}
-        <EditorArea />
+
+        {activePanel ===
+          "run" && (
+          <RunPanel />
+        )}
+
+
+        {activePanel ===
+          "debug" && (
+          <DebugPanel />
+        )}
+
+
+        {activePanel ===
+          "settings" && (
+          <SettingsPanel />
+        )}
+
+
+        {activePanel ===
+          "profile" && (
+          <ProfilePanel />
+        )}
+
+
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+
+          <div className="flex-1 min-h-0">
+            <EditorArea />
+          </div>
+
+
+          {showTerminal && (
+            <div className="h-64 flex-shrink-0">
+              <TerminalPanel
+                onClose={() =>
+                  setShowTerminal(false)
+                }
+              />
+            </div>
+          )}
+
+        </div>
 
       </div>
+
 
       <StatusBar />
 

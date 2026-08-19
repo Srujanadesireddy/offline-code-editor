@@ -19,6 +19,7 @@ function CodeEditor() {
         setDirtyFiles,
         setSaveStatus,
         explorer,
+        setEditorInstance,
     } = useEditor();
 
     const [editorSettings, setEditorSettings] = useState(() => {
@@ -183,7 +184,7 @@ function CodeEditor() {
 
                 toast.error(
                     data.message ||
-                        "Save failed"
+                    "Save failed"
                 );
 
                 return false;
@@ -325,6 +326,10 @@ function CodeEditor() {
                     false,
             }}
 
+            onMount={(editor) => {
+                setEditorInstance(editor);
+            }}
+
             onChange={(value = "") => {
                 setFiles((prev) => ({
                     ...prev,
@@ -357,7 +362,7 @@ function CodeEditor() {
 
                         const currentContent =
                             filesRef.current[
-                                currentFile
+                            currentFile
                             ] || "";
 
                         const saved =

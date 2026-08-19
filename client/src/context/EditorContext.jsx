@@ -5,6 +5,7 @@ const EditorContext = createContext();
 
 export function EditorProvider({ children }) {
     const [activeFile, setActiveFile] = useState("");
+    const [editorInstance, setEditorInstance] = useState(null);
     const [saveStatus, setSaveStatus] = useState("Saved");
     const [openTabs, setOpenTabs] = useState([]);
     const [explorer, setExplorer] = useState([]);
@@ -689,6 +690,8 @@ export function EditorProvider({ children }) {
                 renameFolder,
                 deleteFolder,
                 moveFile,
+                editorInstance,
+                setEditorInstance,
             }}
         >
             {children}

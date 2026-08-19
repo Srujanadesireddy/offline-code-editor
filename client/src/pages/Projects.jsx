@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   FolderKanban,
@@ -14,8 +15,15 @@ import Navbar from "../components/dashboard/Navbar";
 import ProjectCard from "../components/dashboard/ProjectCard";
 
 function Projects() {
+
+  const [searchParams] =
+    useSearchParams();
+
   const [projects, setProjects] = useState([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(
+    searchParams.get("search") || ""
+  );
+
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
@@ -45,7 +53,7 @@ function Projects() {
       ) {
         throw new Error(
           data.message ||
-            "Failed to load projects"
+          "Failed to load projects"
         );
       }
 
@@ -61,7 +69,7 @@ function Projects() {
 
       toast.error(
         error.message ||
-          "Unable to load projects"
+        "Unable to load projects"
       );
 
     } finally {
@@ -126,7 +134,7 @@ function Projects() {
       ) {
         toast.error(
           data.message ||
-            "Failed to create project"
+          "Failed to create project"
         );
 
         return;
@@ -286,7 +294,7 @@ function Projects() {
 
           {!loading &&
             filteredProjects.length ===
-              0 && (
+            0 && (
 
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center">
 
@@ -320,7 +328,7 @@ function Projects() {
 
           {!loading &&
             filteredProjects.length >
-              0 && (
+            0 && (
 
               <div className="space-y-4">
 

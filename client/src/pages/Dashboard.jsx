@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FolderOpen, Search } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import Navbar from "../components/dashboard/Navbar";
 import WelcomeCard from "../components/dashboard/WelcomeCard";
@@ -11,6 +12,7 @@ function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   const fetchProjects = async () => {
     try {
@@ -110,7 +112,7 @@ function Dashboard() {
 
             <button
               onClick={() =>
-                window.location.href = "/projects"
+                navigate("/projects")
               }
               className="text-blue-400 hover:text-blue-300 font-medium transition"
             >
