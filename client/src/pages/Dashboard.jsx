@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
-import { FolderOpen, Search } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 
 import Navbar from "../components/dashboard/Navbar";
 import WelcomeCard from "../components/dashboard/WelcomeCard";
 import NewProjectCard from "../components/dashboard/NewProjectCard";
 import ProjectCard from "../components/dashboard/ProjectCard";
 import Sidebar from "../components/dashboard/Sidebar";
+
+import {
+  saveProject,
+  getProjects,
+} from "../database/indexedDB";
 
 function Dashboard() {
   const [projects, setProjects] = useState([]);
@@ -38,10 +44,44 @@ function Dashboard() {
         );
       }
 
-      setProjects(data.projects || []);
+      const fetchedProjects = data.projects || [];
+
+      setProjects(fetchedProjects);
+
+      // Cache projects locally
+      for (const project of fetchedProjects) {
+        await saveProject({
+          id: project._id,
+          name: project.name,
+          description: project.description || "",
+          owner: project.owner,
+          createdAt: project.createdAt,
+          updatedAt: project.updatedAt,
+        });
+      }
     } catch (error) {
-      console.error("Dashboard project error:", error);
-      setError("Unable to load projects.");
+      console.error(
+        "Dashboard project error:",
+        error
+      );
+
+      // OFFLINE FALLBACK
+      try {
+        const cachedProjects = await getProjects();
+
+        setProjects(cachedProjects || []);
+
+        if (cachedProjects?.length > 0) {
+          toast("Offline mode: showing saved projects");
+        }
+      } catch (offlineError) {
+        console.error(
+          "Offline project loading error:",
+          offlineError
+        );
+
+        setError("Unable to load projects.");
+      }
     } finally {
       setLoading(false);
     }
@@ -63,7 +103,9 @@ function Dashboard() {
   const handleProjectDeleted = (projectId) => {
     setProjects((prev) =>
       prev.filter(
-        (project) => project._id !== projectId
+        (project) =>
+          project._id !== projectId &&
+          project.id !== projectId
       )
     );
   };
@@ -71,8 +113,8 @@ function Dashboard() {
   const recentProjects = [...projects]
     .sort(
       (a, b) =>
-        new Date(b.updatedAt) -
-        new Date(a.updatedAt)
+        new Date(b.updatedAt || b.createdAt) -
+        new Date(a.updatedAt || a.createdAt)
     )
     .slice(0, 6);
 
@@ -94,7 +136,6 @@ function Dashboard() {
           <NewProjectCard
             onProjectCreated={handleProjectCreated}
           />
-
 
           {/* Recent Projects */}
 
@@ -121,7 +162,6 @@ function Dashboard() {
 
           </div>
 
-
           {/* Loading */}
 
           {loading && (
@@ -135,7 +175,6 @@ function Dashboard() {
 
             </div>
           )}
-
 
           {/* Error */}
 
@@ -155,7 +194,6 @@ function Dashboard() {
 
             </div>
           )}
-
 
           {/* Empty */}
 
@@ -181,7 +219,6 @@ function Dashboard() {
               </div>
             )}
 
-
           {/* Projects */}
 
           {!loading &&
@@ -193,7 +230,7 @@ function Dashboard() {
                 {recentProjects.map((project) => (
 
                   <ProjectCard
-                    key={project._id}
+                    key={project._id || project.id}
                     project={project}
                     onDeleted={handleProjectDeleted}
                   />

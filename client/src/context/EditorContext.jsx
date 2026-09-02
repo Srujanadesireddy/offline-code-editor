@@ -1,5 +1,16 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import toast from "react-hot-toast";
+import {
+    getFileById,
+    getFolderById,
+    getFoldersByProject,
+    getFilesByProject,
+    saveFile as saveFileToIndexedDB,
+    deleteFile as deleteFileFromIndexedDB,
+    saveFolder as saveFolderToIndexedDB,
+    deleteFolder as deleteFolderFromIndexedDB,
+    addOperation,
+} from "../database/indexedDB";
 
 const EditorContext = createContext();
 
@@ -19,7 +30,10 @@ export function EditorProvider({ children }) {
         // Already loaded
         if (files[file.name] !== undefined) {
             if (!openTabs.includes(file.name)) {
-                setOpenTabs((prev) => [...prev, file.name]);
+                setOpenTabs((prev) => [
+                    ...prev,
+                    file.name,
+                ]);
             }
 
             setActiveFile(file.name);
@@ -38,16 +52,20 @@ export function EditorProvider({ children }) {
                 }
             );
 
+            if (!response.ok) {
+                throw new Error("Server unavailable");
+            }
+
             const data = await response.json();
 
             if (!data.success) {
-                toast.error("Unable to open file");
-                return;
+                throw new Error("Unable to open file");
             }
 
             setFiles((prev) => ({
                 ...prev,
-                [data.file.name]: data.file.content || "",
+                [data.file.name]:
+                    data.file.content || "",
             }));
 
             setOpenTabs((prev) =>
@@ -58,9 +76,51 @@ export function EditorProvider({ children }) {
 
             setActiveFile(data.file.name);
 
-        } catch (err) {
-            toast.error("Failed to load file");
-            console.error(err);
+        } catch (error) {
+
+            console.warn(
+                "Backend unavailable. Loading file from IndexedDB..."
+            );
+
+            try {
+                const localFile =
+                    await getFileById(file.id);
+
+                if (!localFile) {
+                    toast.error(
+                        "File not available offline"
+                    );
+                    return;
+                }
+
+                setFiles((prev) => ({
+                    ...prev,
+                    [localFile.name]:
+                        localFile.content || "",
+                }));
+
+                setOpenTabs((prev) =>
+                    prev.includes(localFile.name)
+                        ? prev
+                        : [...prev, localFile.name]
+                );
+
+                setActiveFile(localFile.name);
+
+                toast.success(
+                    "Opened from offline storage"
+                );
+
+            } catch (offlineError) {
+                console.error(
+                    "Offline file loading failed:",
+                    offlineError
+                );
+
+                toast.error(
+                    "Unable to open file"
+                );
+            }
         }
     };
 
@@ -118,22 +178,28 @@ export function EditorProvider({ children }) {
 
         if (!fileName) return;
 
-        try {
-            const token = localStorage.getItem("token");
-            const projectId = window.location.pathname.split("/").pop();
+        const projectId =
+            window.location.pathname.split("/").pop();
 
-            const folderId =
-                folder?.type === "folder" && folder.id !== "root"
-                    ? folder.id
-                    : null;
+        const folderId =
+            folder?.type === "folder" &&
+                folder.id !== "root"
+                ? folder.id
+                : null;
+
+        try {
+            const token =
+                localStorage.getItem("token");
 
             const response = await fetch(
                 "http://localhost:5000/api/files",
                 {
                     method: "POST",
                     headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
+                        "Content-Type":
+                            "application/json",
+                        Authorization:
+                            `Bearer ${token}`,
                     },
                     body: JSON.stringify({
                         name: fileName,
@@ -147,8 +213,10 @@ export function EditorProvider({ children }) {
             const data = await response.json();
 
             if (!data.success) {
-                toast.error(data.message || "Failed to create file");
-                return;
+                throw new Error(
+                    data.message ||
+                    "Failed to create file"
+                );
             }
 
             const newFile = {
@@ -157,17 +225,40 @@ export function EditorProvider({ children }) {
                 type: "file",
             };
 
+            // Save locally too
+            await saveFileToIndexedDB({
+                id: data.file._id,
+                name: data.file.name,
+                content: "",
+                language:
+                    data.file.language ||
+                    "javascript",
+                projectId:
+                    data.file.project ||
+                    projectId,
+                folderId:
+                    data.file.folder ||
+                    folderId,
+                createdAt:
+                    data.file.createdAt ||
+                    new Date().toISOString(),
+                updatedAt:
+                    data.file.updatedAt ||
+                    new Date().toISOString(),
+            });
+
             setFiles((prev) => ({
                 ...prev,
-                [data.file.name]: "",
+                [fileName]: "",
             }));
 
             setExplorer((prev) => {
-
                 const addFile = (nodes) =>
                     nodes.map((node) => {
-
-                        if (node.id === (folder?.id || "root")) {
+                        if (
+                            node.id ===
+                            (folder?.id || "root")
+                        ) {
                             return {
                                 ...node,
                                 children: [
@@ -180,7 +271,10 @@ export function EditorProvider({ children }) {
                         if (node.children) {
                             return {
                                 ...node,
-                                children: addFile(node.children),
+                                children:
+                                    addFile(
+                                        node.children
+                                    ),
                             };
                         }
 
@@ -191,18 +285,135 @@ export function EditorProvider({ children }) {
             });
 
             setOpenTabs((prev) =>
-                prev.includes(data.file.name)
+                prev.includes(fileName)
                     ? prev
-                    : [...prev, data.file.name]
+                    : [...prev, fileName]
             );
 
-            setActiveFile(data.file.name);
+            setActiveFile(fileName);
 
             toast.success("File created");
 
         } catch (error) {
-            console.error("Create file error:", error);
-            toast.error("Server Error");
+
+            console.warn(
+                "Backend unavailable. Creating file offline."
+            );
+
+            const localId =
+                `local-file-${Date.now()}`;
+
+            const newFile = {
+                id: localId,
+                name: fileName,
+                type: "file",
+            };
+
+            // Save file locally
+            await saveFileToIndexedDB({
+                id: localId,
+                name: fileName,
+                content: "",
+                language: "javascript",
+                projectId,
+                folderId,
+                createdAt:
+                    new Date().toISOString(),
+                updatedAt:
+                    new Date().toISOString(),
+            });
+
+            // Add operation to sync queue
+            await addOperation({
+                type: "CREATE_FILE",
+                entityId: localId,
+                projectId,
+                folderId,
+                data: {
+                    name: fileName,
+                    language: "javascript",
+                    content: "",
+                },
+            });
+
+            setFiles((prev) => ({
+                ...prev,
+                [fileName]: "",
+            }));
+
+            setExplorer((prev) => {
+                const addFile = (nodes) =>
+                    nodes.map((node) => {
+                        if (
+                            node.id ===
+                            (folder?.id || "root")
+                        ) {
+                            return {
+                                ...node,
+                                children: [
+                                    ...(node.children || []),
+                                    newFile,
+                                ],
+                            };
+                        }
+
+                        if (node.children) {
+                            return {
+                                ...node,
+                                children:
+                                    addFile(
+                                        node.children
+                                    ),
+                            };
+                        }
+
+                        return node;
+                    });
+
+                return addFile(prev);
+            });
+
+            setOpenTabs((prev) =>
+                prev.includes(fileName)
+                    ? prev
+                    : [...prev, fileName]
+            );
+
+            setActiveFile(fileName);
+
+            toast.success(
+                "File created offline"
+            );
+        }
+    };
+
+    const removeFileFromUI = (fileName) => {
+        setFiles((prev) => {
+            const updated = { ...prev };
+
+            delete updated[fileName];
+
+            return updated;
+        });
+
+        setExplorer((prev) =>
+            deleteNode(prev, fileName)
+        );
+
+        setOpenTabs((prev) =>
+            prev.filter(
+                (tab) => tab !== fileName
+            )
+        );
+
+        setDirtyFiles((prev) =>
+            prev.filter(
+                (file) => file !== fileName
+            )
+        );
+
+        if (activeFile === fileName) {
+            setActiveFile("");
         }
     };
 
@@ -211,92 +422,216 @@ export function EditorProvider({ children }) {
 
         if (!projectFolder) return;
 
-        const file = projectFolder.children.find(
-            (f) => f.name === fileName
-        );
+        const findFile = (nodes) => {
+            for (const node of nodes) {
+                if (
+                    node.type === "file" &&
+                    node.name === fileName
+                ) {
+                    return node;
+                }
+
+                if (node.children) {
+                    const found =
+                        findFile(node.children);
+
+                    if (found) return found;
+                }
+            }
+
+            return null;
+        };
+
+        const file =
+            findFile(explorer);
 
         if (!file) return;
 
-        const token = localStorage.getItem("token");
-
         try {
+            const token =
+                localStorage.getItem("token");
+
             const response = await fetch(
                 `http://localhost:5000/api/files/${file.id}`,
                 {
                     method: "DELETE",
                     headers: {
-                        Authorization: `Bearer ${token}`,
+                        Authorization:
+                            `Bearer ${token}`,
                     },
                 }
             );
 
-            const data = await response.json();
+            const data =
+                await response.json();
 
             if (!data.success) {
-                toast.error(data.message || "Delete failed");
-                return;
+                throw new Error(
+                    data.message ||
+                    "Delete failed"
+                );
             }
 
-            setFiles((prev) => {
-                const updated = { ...prev };
-                delete updated[fileName];
-                return updated;
-            });
-
-            setExplorer((prev) =>
-                deleteNode(prev, fileName)
+            await deleteFileFromIndexedDB(
+                file.id
             );
 
-            setOpenTabs((prev) =>
-                prev.filter((tab) => tab !== fileName)
-            );
-
-            if (activeFile === fileName) {
-                setActiveFile("");
-            }
-
-            setDirtyFiles((prev) =>
-                prev.filter((file) => file !== fileName)
+            await removeFileFromUI(
+                fileName
             );
 
             toast.success("File deleted");
 
         } catch (error) {
-            console.error(error);
-            toast.error("Server Error");
+
+            console.warn(
+                "Backend unavailable. Deleting file offline."
+            );
+
+            await deleteFileFromIndexedDB(
+                file.id
+            );
+
+            await addOperation({
+                type: "DELETE_FILE",
+                entityId: file.id,
+                data: {
+                    name: fileName,
+                },
+            });
+
+            await removeFileFromUI(
+                fileName
+            );
+
+            toast.success(
+                "File deleted offline"
+            );
         }
     };
 
-    const renameFile = async (oldName, newName) => {
-        if (!newName || oldName === newName) return;
+    const updateFileNameInUI = (
+        oldName,
+        newName
+    ) => {
+        setFiles((prev) => {
+            const updated = {
+                ...prev,
+            };
 
-        const projectFolder = explorer[0];
+            updated[newName] =
+                updated[oldName];
 
-        if (!projectFolder) return;
+            delete updated[oldName];
 
-        const file = projectFolder.children.find(
-            (f) => f.name === oldName
+            return updated;
+        });
+
+        setExplorer((prev) =>
+            renameNode(
+                prev,
+                oldName,
+                newName
+            )
         );
+
+        setOpenTabs((prev) =>
+            prev.map((tab) =>
+                tab === oldName
+                    ? newName
+                    : tab
+            )
+        );
+
+        setDirtyFiles((prev) =>
+            prev.map((file) =>
+                file === oldName
+                    ? newName
+                    : file
+            )
+        );
+
+        if (activeFile === oldName) {
+            setActiveFile(newName);
+        }
+    };
+
+    const renameFile = async (
+        oldName,
+        newName
+    ) => {
+        if (
+            !newName ||
+            oldName === newName
+        ) {
+            return;
+        }
+
+        const findFile = (nodes) => {
+            for (const node of nodes) {
+                if (
+                    node.type === "file" &&
+                    node.name === oldName
+                ) {
+                    return node;
+                }
+
+                if (node.children) {
+                    const found =
+                        findFile(node.children);
+
+                    if (found) return found;
+                }
+            }
+
+            return null;
+        };
+
+        const file =
+            findFile(explorer);
 
         if (!file) return;
 
-        if (projectFolder.children.some(
-            (f) => f.name === newName
-        )) {
-            toast.error("A file with this name already exists!");
+        const allFiles = [];
+
+        const collectFiles = (nodes) => {
+            nodes.forEach((node) => {
+                if (node.type === "file") {
+                    allFiles.push(node);
+                }
+
+                if (node.children) {
+                    collectFiles(node.children);
+                }
+            });
+        };
+
+        collectFiles(explorer);
+
+        if (
+            allFiles.some(
+                (f) => f.name === newName
+            )
+        ) {
+            toast.error(
+                "A file with this name already exists!"
+            );
             return;
         }
 
         try {
-            const token = localStorage.getItem("token");
+            const token =
+                localStorage.getItem("token");
 
             const response = await fetch(
                 `http://localhost:5000/api/files/${file.id}/rename`,
                 {
                     method: "PUT",
                     headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
+                        "Content-Type":
+                            "application/json",
+                        Authorization:
+                            `Bearer ${token}`,
                     },
                     body: JSON.stringify({
                         name: newName,
@@ -304,74 +639,100 @@ export function EditorProvider({ children }) {
                 }
             );
 
-            const data = await response.json();
+            const data =
+                await response.json();
 
             if (!data.success) {
-                toast.error(data.message || "Rename failed");
-                return;
+                throw new Error(
+                    data.message ||
+                    "Rename failed"
+                );
             }
 
-            setFiles((prev) => {
-                const updated = { ...prev };
+            const localFile =
+                await getFileById(file.id);
 
-                updated[newName] = updated[oldName];
-
-                delete updated[oldName];
-
-                return updated;
-            });
-
-            setExplorer((prev) =>
-                renameNode(prev, oldName, newName)
-            );
-
-            setOpenTabs((prev) =>
-                prev.map((tab) =>
-                    tab === oldName ? newName : tab
-                )
-            );
-
-            if (activeFile === oldName) {
-                setActiveFile(newName);
+            if (localFile) {
+                await saveFileToIndexedDB({
+                    ...localFile,
+                    name: newName,
+                    updatedAt:
+                        new Date().toISOString(),
+                });
             }
 
-            setDirtyFiles((prev) =>
-                prev.map((file) =>
-                    file === oldName ? newName : file
-                )
+            updateFileNameInUI(
+                oldName,
+                newName
             );
 
             toast.success("File renamed");
 
         } catch (error) {
-            console.error(error);
-            toast.error("Server Error");
+
+            console.warn(
+                "Backend unavailable. Renaming file offline."
+            );
+
+            const localFile =
+                await getFileById(file.id);
+
+            if (localFile) {
+                await saveFileToIndexedDB({
+                    ...localFile,
+                    name: newName,
+                    updatedAt:
+                        new Date().toISOString(),
+                });
+            }
+
+            await addOperation({
+                type: "RENAME_FILE",
+                entityId: file.id,
+                data: {
+                    oldName,
+                    newName,
+                },
+            });
+
+            updateFileNameInUI(
+                oldName,
+                newName
+            );
+
+            toast.success(
+                "File renamed offline"
+            );
         }
     };
+
     const createNewFolder = async (folder) => {
         const folderName = prompt("Folder name");
 
         if (!folderName) return;
 
+        const projectId =
+            window.location.pathname.split("/").pop();
+
+        const parent =
+            folder?.type === "folder" &&
+                folder.id !== "root"
+                ? folder.id
+                : null;
+
         try {
-            const token = localStorage.getItem("token");
-
-            // Get project ID from current editor URL
-            const projectId = window.location.pathname.split("/").pop();
-
-            // Parent folder ID
-            const parent =
-                folder?.type === "folder" && folder.id !== "root"
-                    ? folder.id
-                    : null;
+            const token =
+                localStorage.getItem("token");
 
             const response = await fetch(
                 "http://localhost:5000/api/folders",
                 {
                     method: "POST",
                     headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
+                        "Content-Type":
+                            "application/json",
+                        Authorization:
+                            `Bearer ${token}`,
                     },
                     body: JSON.stringify({
                         name: folderName,
@@ -381,11 +742,14 @@ export function EditorProvider({ children }) {
                 }
             );
 
-            const data = await response.json();
+            const data =
+                await response.json();
 
             if (!data.success) {
-                toast.error(data.message || "Failed to create folder");
-                return;
+                throw new Error(
+                    data.message ||
+                    "Failed to create folder"
+                );
             }
 
             const newFolder = {
@@ -395,14 +759,31 @@ export function EditorProvider({ children }) {
                 children: [],
             };
 
-            setExplorer((prev) => {
+            // Save locally too
+            await saveFolderToIndexedDB({
+                id: data.folder._id,
+                name: data.folder.name,
+                projectId:
+                    data.folder.project ||
+                    projectId,
+                parentId:
+                    data.folder.parent ||
+                    parent,
+                createdAt:
+                    data.folder.createdAt ||
+                    new Date().toISOString(),
+                updatedAt:
+                    data.folder.updatedAt ||
+                    new Date().toISOString(),
+            });
 
+            setExplorer((prev) => {
                 const addFolder = (nodes) => {
                     return nodes.map((node) => {
 
                         if (
-                            folder &&
-                            node.id === folder.id
+                            node.id ===
+                            (folder?.id || "root")
                         ) {
                             return {
                                 ...node,
@@ -416,7 +797,10 @@ export function EditorProvider({ children }) {
                         if (node.children) {
                             return {
                                 ...node,
-                                children: addFolder(node.children),
+                                children:
+                                    addFolder(
+                                        node.children
+                                    ),
                             };
                         }
 
@@ -424,44 +808,113 @@ export function EditorProvider({ children }) {
                     });
                 };
 
-                // No parent → add to Project root
-                if (!folder || folder.id === "root") {
-                    return prev.map((root) => ({
-                        ...root,
-                        children: [
-                            ...(root.children || []),
-                            newFolder,
-                        ],
-                    }));
-                }
-
                 return addFolder(prev);
             });
 
             toast.success("Folder created");
 
         } catch (error) {
-            console.error("Create folder error:", error);
-            toast.error("Server Error");
+
+            console.warn(
+                "Backend unavailable. Creating folder offline."
+            );
+
+            const localId =
+                `local-folder-${Date.now()}`;
+
+            const newFolder = {
+                id: localId,
+                name: folderName,
+                type: "folder",
+                children: [],
+            };
+
+            await saveFolderToIndexedDB({
+                id: localId,
+                name: folderName,
+                projectId,
+                parentId: parent,
+                createdAt:
+                    new Date().toISOString(),
+                updatedAt:
+                    new Date().toISOString(),
+            });
+
+            await addOperation({
+                type: "CREATE_FOLDER",
+                entityId: localId,
+                projectId,
+                parentId: parent,
+                data: {
+                    name: folderName,
+                },
+            });
+
+            setExplorer((prev) => {
+                const addFolder = (nodes) => {
+                    return nodes.map((node) => {
+
+                        if (
+                            node.id ===
+                            (folder?.id || "root")
+                        ) {
+                            return {
+                                ...node,
+                                children: [
+                                    ...(node.children || []),
+                                    newFolder,
+                                ],
+                            };
+                        }
+
+                        if (node.children) {
+                            return {
+                                ...node,
+                                children:
+                                    addFolder(
+                                        node.children
+                                    ),
+                            };
+                        }
+
+                        return node;
+                    });
+                };
+
+                return addFolder(prev);
+            });
+
+            toast.success(
+                "Folder created offline"
+            );
         }
     };
 
-
-    const renameFolder = async (folder, newName) => {
-        if (!folder || !newName || folder.name === newName) {
+    const renameFolder = async (
+        folder,
+        newName
+    ) => {
+        if (
+            !folder ||
+            !newName ||
+            folder.name === newName
+        ) {
             return;
         }
 
         try {
-            const token = localStorage.getItem("token");
+            const token =
+                localStorage.getItem("token");
 
             const response = await fetch(
                 `http://localhost:5000/api/folders/${folder.id}/rename`,
                 {
                     method: "PUT",
                     headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
+                        "Content-Type":
+                            "application/json",
+                        Authorization:
+                            `Bearer ${token}`,
                     },
                     body: JSON.stringify({
                         name: newName,
@@ -469,42 +922,199 @@ export function EditorProvider({ children }) {
                 }
             );
 
-            const data = await response.json();
+            const data =
+                await response.json();
 
             if (!data.success) {
-                toast.error(data.message || "Rename failed");
-                return;
+                throw new Error(
+                    data.message ||
+                    "Rename failed"
+                );
             }
 
-            const renameFolderNode = (nodes) =>
-                nodes.map((node) => {
-                    if (node.id === folder.id) {
-                        return {
-                            ...node,
-                            name: newName,
-                        };
-                    }
+            const localFolder =
+                await getFolderById(folder.id);
 
-                    if (node.children) {
-                        return {
-                            ...node,
-                            children: renameFolderNode(
-                                node.children
-                            ),
-                        };
-                    }
-
-                    return node;
+            if (localFolder) {
+                await saveFolderToIndexedDB({
+                    ...localFolder,
+                    name: newName,
+                    updatedAt:
+                        new Date().toISOString(),
                 });
+            }
 
-            setExplorer(renameFolderNode(explorer));
+            setExplorer((prev) => {
+                const renameFolderNode = (
+                    nodes
+                ) =>
+                    nodes.map((node) => {
+
+                        if (
+                            node.id ===
+                            folder.id
+                        ) {
+                            return {
+                                ...node,
+                                name: newName,
+                            };
+                        }
+
+                        if (node.children) {
+                            return {
+                                ...node,
+                                children:
+                                    renameFolderNode(
+                                        node.children
+                                    ),
+                            };
+                        }
+
+                        return node;
+                    });
+
+                return renameFolderNode(prev);
+            });
 
             toast.success("Folder renamed");
 
         } catch (error) {
-            console.error(error);
-            toast.error("Server Error");
+
+            console.warn(
+                "Backend unavailable. Renaming folder offline."
+            );
+
+            const localFolder =
+                await getFolderById(folder.id);
+
+            if (localFolder) {
+                await saveFolderToIndexedDB({
+                    ...localFolder,
+                    name: newName,
+                    updatedAt:
+                        new Date().toISOString(),
+                });
+            }
+
+            await addOperation({
+                type: "RENAME_FOLDER",
+                entityId: folder.id,
+                data: {
+                    oldName: folder.name,
+                    newName,
+                },
+            });
+
+            setExplorer((prev) => {
+                const renameFolderNode = (
+                    nodes
+                ) =>
+                    nodes.map((node) => {
+
+                        if (
+                            node.id ===
+                            folder.id
+                        ) {
+                            return {
+                                ...node,
+                                name: newName,
+                            };
+                        }
+
+                        if (node.children) {
+                            return {
+                                ...node,
+                                children:
+                                    renameFolderNode(
+                                        node.children
+                                    ),
+                            };
+                        }
+
+                        return node;
+                    });
+
+                return renameFolderNode(prev);
+            });
+
+            toast.success(
+                "Folder renamed offline"
+            );
         }
+    };
+
+    const removeFolderFromUI = (folder) => {
+
+        const collectFiles = (node) => {
+            let names = [];
+
+            if (node.type === "file") {
+                names.push(node.name);
+            }
+
+            if (node.children) {
+                node.children.forEach((child) => {
+                    names = [
+                        ...names,
+                        ...collectFiles(child),
+                    ];
+                });
+            }
+
+            return names;
+        };
+
+        const deletedFileNames =
+            collectFiles(folder);
+
+        setFiles((prev) => {
+            const updated = { ...prev };
+
+            deletedFileNames.forEach((name) => {
+                delete updated[name];
+            });
+
+            return updated;
+        });
+
+        setOpenTabs((prev) =>
+            prev.filter(
+                (tab) =>
+                    !deletedFileNames.includes(tab)
+            )
+        );
+
+        setDirtyFiles((prev) =>
+            prev.filter(
+                (file) =>
+                    !deletedFileNames.includes(file)
+            )
+        );
+
+        if (
+            deletedFileNames.includes(activeFile)
+        ) {
+            setActiveFile("");
+        }
+
+        const removeFolder = (nodes) =>
+            nodes
+                .filter(
+                    (node) =>
+                        node.id !== folder.id
+                )
+                .map((node) => ({
+                    ...node,
+                    children: node.children
+                        ? removeFolder(
+                            node.children
+                        )
+                        : [],
+                }));
+
+        setExplorer((prev) =>
+            removeFolder(prev)
+        );
     };
 
 
@@ -512,115 +1122,248 @@ export function EditorProvider({ children }) {
         if (!folder) return;
 
         try {
-            const token = localStorage.getItem("token");
+            const token =
+                localStorage.getItem("token");
 
             const response = await fetch(
                 `http://localhost:5000/api/folders/${folder.id}`,
                 {
                     method: "DELETE",
                     headers: {
-                        Authorization: `Bearer ${token}`,
+                        Authorization:
+                            `Bearer ${token}`,
                     },
                 }
             );
 
-            const data = await response.json();
+            const data =
+                await response.json();
 
             if (!data.success) {
-                toast.error(data.message || "Delete failed");
-                return;
+                throw new Error(
+                    data.message ||
+                    "Delete failed"
+                );
             }
 
-            const removeFolder = (nodes) =>
-                nodes
-                    .filter((node) => node.id !== folder.id)
-                    .map((node) => ({
-                        ...node,
-                        children: node.children
-                            ? removeFolder(node.children)
-                            : [],
-                    }));
+            // Remove folder locally
+            await deleteFolderFromIndexedDB(
+                folder.id
+            );
 
-            setExplorer(removeFolder(explorer));
+            // Remove children from local storage
+            const removeLocalChildren = async (
+                nodes
+            ) => {
+                for (const node of nodes) {
+                    if (node.type === "file") {
+                        await deleteFileFromIndexedDB(
+                            node.id
+                        );
+                    }
+
+                    if (
+                        node.type === "folder" &&
+                        node.id !== folder.id
+                    ) {
+                        await deleteFolderFromIndexedDB(
+                            node.id
+                        );
+                    }
+
+                    if (node.children) {
+                        await removeLocalChildren(
+                            node.children
+                        );
+                    }
+                }
+            };
+
+            await removeLocalChildren(
+                folder.children || []
+            );
+
+            removeFolderFromUI(folder);
 
             toast.success("Folder deleted");
 
         } catch (error) {
-            console.error(error);
-            toast.error("Server Error");
+
+            console.warn(
+                "Backend unavailable. Deleting folder offline."
+            );
+
+            try {
+                const projectId =
+                    window.location.pathname
+                        .split("/")
+                        .pop();
+
+                // Get all local folders
+                const localFolders =
+                    await getFoldersByProject(
+                        projectId
+                    );
+
+                // Get all local files
+                const localFiles =
+                    await getFilesByProject(
+                        projectId
+                    );
+
+                // Find every folder inside the
+                // deleted folder recursively
+                const folderIdsToDelete = new Set([
+                    folder.id,
+                ]);
+
+                let foundNewFolder = true;
+
+                while (foundNewFolder) {
+                    foundNewFolder = false;
+
+                    for (const localFolder of localFolders) {
+
+                        if (
+                            localFolder.parentId &&
+                            folderIdsToDelete.has(
+                                localFolder.parentId
+                            ) &&
+                            !folderIdsToDelete.has(
+                                localFolder.id
+                            )
+                        ) {
+                            folderIdsToDelete.add(
+                                localFolder.id
+                            );
+
+                            foundNewFolder = true;
+                        }
+                    }
+                }
+
+                // Delete all folders
+                for (
+                    const folderId
+                    of folderIdsToDelete
+                ) {
+                    await deleteFolderFromIndexedDB(
+                        folderId
+                    );
+                }
+
+                // Delete files belonging to
+                // deleted folders
+                for (const file of localFiles) {
+
+                    if (
+                        file.folderId &&
+                        folderIdsToDelete.has(
+                            file.folderId
+                        )
+                    ) {
+                        await deleteFileFromIndexedDB(
+                            file.id
+                        );
+                    }
+                }
+
+                // Record operation for future sync
+                await addOperation({
+                    type: "DELETE_FOLDER",
+                    entityId: folder.id,
+                    projectId,
+                    data: {
+                        name: folder.name,
+                    },
+                });
+
+                // Update UI
+                removeFolderFromUI(folder);
+
+                toast.success(
+                    "Folder deleted offline"
+                );
+
+            } catch (offlineDeleteError) {
+
+                console.error(
+                    "Offline folder deletion failed:",
+                    offlineDeleteError
+                );
+
+                toast.error(
+                    "Unable to delete folder offline"
+                );
+            }
         }
     };
 
-    const moveFile = async (file, targetFolder) => {
-        if (!file || !targetFolder) return;
+    const moveFileInExplorer = (
+        file,
+        targetFolder
+    ) => {
 
-        try {
-            const token = localStorage.getItem("token");
-
-            const folderId =
-                targetFolder.id === "root"
-                    ? null
-                    : targetFolder.id;
-
-            const response = await fetch(
-                `http://localhost:5000/api/files/${file.id}/move`,
-                {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        folderId,
-                    }),
-                }
-            );
-
-            const data = await response.json();
-
-            if (!data.success) {
-                toast.error(data.message || "Move failed");
-                return;
-            }
-
-            // Remove file from EVERY location
-            const removeFileFromTree = (nodes) => {
-                return nodes.map((node) => ({
-                    ...node,
-                    children: node.children
-                        ? node.children
-                            .filter(
-                                (child) => child.id !== file.id
-                            )
-                            .map((child) => ({
-                                ...child,
-                                children: child.children
+        const removeFileFromTree = (
+            nodes
+        ) => {
+            return nodes.map((node) => ({
+                ...node,
+                children: node.children
+                    ? node.children
+                        .filter(
+                            (child) =>
+                                child.id !== file.id
+                        )
+                        .map((child) => ({
+                            ...child,
+                            children:
+                                child.children
                                     ? removeFileFromTree(
                                         child.children
                                     )
                                     : [],
-                            }))
-                        : [],
+                        }))
+                    : [],
+            }));
+        };
+
+        let updatedExplorer =
+            removeFileFromTree(explorer);
+
+        const fileNode = {
+            id: file.id,
+            name: file.name,
+            type: "file",
+        };
+
+        if (targetFolder.id === "root") {
+
+            updatedExplorer =
+                updatedExplorer.map((root) => ({
+                    ...root,
+                    children: [
+                        ...(root.children || []),
+                        fileNode,
+                    ],
                 }));
-            };
 
-            let updatedExplorer =
-                removeFileFromTree(explorer);
+        } else {
 
-            // Add file to destination
-            const addFileToFolder = (nodes) => {
+            const addFileToFolder = (
+                nodes
+            ) => {
                 return nodes.map((node) => {
 
-                    if (node.id === targetFolder.id) {
+                    if (
+                        node.id ===
+                        targetFolder.id
+                    ) {
                         return {
                             ...node,
                             children: [
                                 ...(node.children || []),
-                                {
-                                    id: file.id,
-                                    name: file.name,
-                                    type: "file",
-                                },
+                                fileNode,
                             ],
                         };
                     }
@@ -628,9 +1371,10 @@ export function EditorProvider({ children }) {
                     if (node.children) {
                         return {
                             ...node,
-                            children: addFileToFolder(
-                                node.children
-                            ),
+                            children:
+                                addFileToFolder(
+                                    node.children
+                                ),
                         };
                     }
 
@@ -638,32 +1382,109 @@ export function EditorProvider({ children }) {
                 });
             };
 
-            if (targetFolder.id === "root") {
-                updatedExplorer = updatedExplorer.map(
-                    (root) => ({
-                        ...root,
-                        children: [
-                            ...(root.children || []),
-                            {
-                                id: file.id,
-                                name: file.name,
-                                type: "file",
-                            },
-                        ],
-                    })
+            updatedExplorer =
+                addFileToFolder(
+                    updatedExplorer
                 );
-            } else {
-                updatedExplorer =
-                    addFileToFolder(updatedExplorer);
+        }
+
+        setExplorer(updatedExplorer);
+    };
+
+    const moveFile = async (
+        file,
+        targetFolder
+    ) => {
+        if (!file || !targetFolder) return;
+
+        const folderId =
+            targetFolder.id === "root"
+                ? null
+                : targetFolder.id;
+
+        try {
+            const token =
+                localStorage.getItem("token");
+
+            const response = await fetch(
+                `http://localhost:5000/api/files/${file.id}/move`,
+                {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+                        Authorization:
+                            `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        folderId,
+                    }),
+                }
+            );
+
+            const data =
+                await response.json();
+
+            if (!data.success) {
+                throw new Error(
+                    data.message ||
+                    "Move failed"
+                );
             }
 
-            setExplorer(updatedExplorer);
+            const localFile =
+                await getFileById(file.id);
+
+            if (localFile) {
+                await saveFileToIndexedDB({
+                    ...localFile,
+                    folderId,
+                    updatedAt:
+                        new Date().toISOString(),
+                });
+            }
+
+            moveFileInExplorer(
+                file,
+                targetFolder
+            );
 
             toast.success("File moved");
 
         } catch (error) {
-            console.error("Move file error:", error);
-            toast.error("Server Error");
+
+            console.warn(
+                "Backend unavailable. Moving file offline."
+            );
+
+            const localFile =
+                await getFileById(file.id);
+
+            if (localFile) {
+                await saveFileToIndexedDB({
+                    ...localFile,
+                    folderId,
+                    updatedAt:
+                        new Date().toISOString(),
+                });
+            }
+
+            await addOperation({
+                type: "MOVE_FILE",
+                entityId: file.id,
+                data: {
+                    folderId,
+                },
+            });
+
+            moveFileInExplorer(
+                file,
+                targetFolder
+            );
+
+            toast.success(
+                "File moved offline"
+            );
         }
     };
 

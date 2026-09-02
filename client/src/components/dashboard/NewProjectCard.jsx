@@ -2,6 +2,11 @@ import { useState } from "react";
 import { Plus, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 
+import {
+  saveProject,
+  addOperation,
+} from "../../database/indexedDB";
+
 function NewProjectCard({ onProjectCreated }) {
   const [creating, setCreating] = useState(false);
 
@@ -37,12 +42,20 @@ function NewProjectCard({ onProjectCreated }) {
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        toast.error(
+        throw new Error(
           data.message || "Failed to create project"
         );
-
-        return;
       }
+
+      // Save online project locally
+      await saveProject({
+        id: data.project._id,
+        name: data.project.name,
+        description: data.project.description || "",
+        owner: data.project.owner,
+        createdAt: data.project.createdAt,
+        updatedAt: data.project.updatedAt,
+      });
 
       toast.success("Project created successfully");
 
@@ -54,9 +67,64 @@ function NewProjectCard({ onProjectCreated }) {
         error
       );
 
-      toast.error(
-        "Unable to create project"
-      );
+      // OFFLINE PROJECT
+      try {
+        const localId =
+          `local-project-${Date.now()}`;
+
+        const now =
+          new Date().toISOString();
+
+        const offlineProject = {
+          _id: localId,
+          id: localId,
+          name: name.trim(),
+          description: "",
+          owner: localStorage.getItem("userId") || null,
+          createdAt: now,
+          updatedAt: now,
+          offline: true,
+        };
+
+        // Save project locally
+        await saveProject({
+          id: localId,
+          name: offlineProject.name,
+          description: "",
+          owner: offlineProject.owner,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        // Add operation to sync queue
+        await addOperation({
+          type: "CREATE_PROJECT",
+          entityId: localId,
+          projectId: localId,
+
+          data: {
+            name: offlineProject.name,
+            description: "",
+          },
+        });
+
+        // Immediately update Dashboard
+        onProjectCreated?.(offlineProject);
+
+        toast.success(
+          "Project created offline"
+        );
+
+      } catch (offlineError) {
+        console.error(
+          "Offline project creation error:",
+          offlineError
+        );
+
+        toast.error(
+          "Unable to create project"
+        );
+      }
 
     } finally {
       setCreating(false);

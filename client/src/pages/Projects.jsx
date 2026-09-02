@@ -14,12 +14,17 @@ import Sidebar from "../components/dashboard/Sidebar";
 import Navbar from "../components/dashboard/Navbar";
 import ProjectCard from "../components/dashboard/ProjectCard";
 
-function Projects() {
+import {
+  saveProject,
+  getProjects,
+  addOperation,
+} from "../database/indexedDB";
 
-  const [searchParams] =
-    useSearchParams();
+function Projects() {
+  const [searchParams] = useSearchParams();
 
   const [projects, setProjects] = useState([]);
+
   const [search, setSearch] = useState(
     searchParams.get("search") || ""
   );
@@ -57,31 +62,78 @@ function Projects() {
         );
       }
 
-      setProjects(
-        data.projects || []
-      );
+      const fetchedProjects =
+        data.projects || [];
+
+      setProjects(fetchedProjects);
+
+      // Cache projects locally
+      for (const project of fetchedProjects) {
+        await saveProject({
+          id: project._id,
+          name: project.name,
+          description:
+            project.description || "",
+          owner: project.owner,
+          createdAt: project.createdAt,
+          updatedAt: project.updatedAt,
+        });
+      }
 
     } catch (error) {
+
       console.error(
         "Projects page error:",
         error
       );
 
-      toast.error(
-        error.message ||
-        "Unable to load projects"
-      );
+      // OFFLINE FALLBACK
+      try {
+
+        const cachedProjects =
+          await getProjects();
+
+        setProjects(
+          cachedProjects || []
+        );
+
+        if (
+          cachedProjects &&
+          cachedProjects.length > 0
+        ) {
+          toast(
+            "Offline mode: showing saved projects"
+          );
+        }
+
+      } catch (offlineError) {
+
+        console.error(
+          "Offline project loading error:",
+          offlineError
+        );
+
+        toast.error(
+          "Unable to load projects"
+        );
+
+      }
 
     } finally {
+
       setLoading(false);
+
     }
   };
-
 
   useEffect(() => {
     fetchProjects();
   }, []);
 
+
+  // =========================
+  // CREATE PROJECT
+  // =========================
 
   const createProject = async () => {
 
@@ -132,13 +184,24 @@ function Projects() {
         !response.ok ||
         !data.success
       ) {
-        toast.error(
+        throw new Error(
           data.message ||
           "Failed to create project"
         );
-
-        return;
       }
+
+      // Save online project locally
+      await saveProject({
+        id: data.project._id,
+        name: data.project.name,
+        description:
+          data.project.description || "",
+        owner: data.project.owner,
+        createdAt:
+          data.project.createdAt,
+        updatedAt:
+          data.project.updatedAt,
+      });
 
       setProjects(
         (prev) => [
@@ -158,9 +221,78 @@ function Projects() {
         error
       );
 
-      toast.error(
-        "Unable to create project"
-      );
+      // =========================
+      // OFFLINE CREATE
+      // =========================
+
+      try {
+
+        const localId =
+          `local-project-${Date.now()}`;
+
+        const now =
+          new Date().toISOString();
+
+        const offlineProject = {
+          _id: localId,
+          id: localId,
+          name: name.trim(),
+          description: "",
+          owner:
+            localStorage.getItem(
+              "userId"
+            ) || null,
+          createdAt: now,
+          updatedAt: now,
+          offline: true,
+        };
+
+        // Save locally
+        await saveProject({
+          id: localId,
+          name: offlineProject.name,
+          description: "",
+          owner: offlineProject.owner,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        // Queue for future synchronization
+        await addOperation({
+          type: "CREATE_PROJECT",
+          entityId: localId,
+          projectId: localId,
+
+          data: {
+            name: offlineProject.name,
+            description: "",
+          },
+        });
+
+        // Immediately show it
+        setProjects(
+          (prev) => [
+            offlineProject,
+            ...prev,
+          ]
+        );
+
+        toast.success(
+          "Project created offline"
+        );
+
+      } catch (offlineError) {
+
+        console.error(
+          "Offline project creation error:",
+          offlineError
+        );
+
+        toast.error(
+          "Unable to create project"
+        );
+
+      }
 
     } finally {
 
@@ -170,6 +302,10 @@ function Projects() {
   };
 
 
+  // =========================
+  // DELETE PROJECT
+  // =========================
+
   const handleProjectDeleted =
     (projectId) => {
 
@@ -177,12 +313,17 @@ function Projects() {
         (prev) =>
           prev.filter(
             (project) =>
-              project._id !==
-              projectId
+              project._id !== projectId &&
+              project.id !== projectId
           )
       );
+
     };
 
+
+  // =========================
+  // SEARCH
+  // =========================
 
   const filteredProjects =
     projects.filter(
@@ -221,7 +362,6 @@ function Projects() {
               </p>
 
             </div>
-
 
             <button
               onClick={createProject}
@@ -293,8 +433,7 @@ function Projects() {
           {/* Empty */}
 
           {!loading &&
-            filteredProjects.length ===
-            0 && (
+            filteredProjects.length === 0 && (
 
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center">
 
@@ -327,8 +466,7 @@ function Projects() {
           {/* Projects */}
 
           {!loading &&
-            filteredProjects.length >
-            0 && (
+            filteredProjects.length > 0 && (
 
               <div className="space-y-4">
 
@@ -336,7 +474,10 @@ function Projects() {
                   (project) => (
 
                     <ProjectCard
-                      key={project._id}
+                      key={
+                        project._id ||
+                        project.id
+                      }
                       project={project}
                       onDeleted={
                         handleProjectDeleted

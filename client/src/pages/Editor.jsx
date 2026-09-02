@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useEditor } from "../context/EditorContext";
+import {
+  saveFolder,
+  saveFile,
+  getFoldersByProject,
+  getFilesByProject,
+} from "../database/indexedDB";
 
 import TopBar from "../components/editor/TopBar";
 import Explorer from "../components/editor/Explorer";
@@ -77,6 +83,32 @@ function Editor() {
           return;
         }
 
+        // Save folders to IndexedDB
+        for (const folder of foldersData.folders) {
+          await saveFolder({
+            id: folder._id,
+            name: folder.name,
+            projectId: folder.project,
+            parentId: folder.parent,
+            createdAt: folder.createdAt,
+            updatedAt: folder.updatedAt,
+          });
+        }
+
+        // Save files to IndexedDB
+        for (const file of filesData.files) {
+          await saveFile({
+            id: file._id,
+            name: file.name,
+            content: file.content || "",
+            language: file.language,
+            projectId: file.project,
+            folderId: file.folder,
+            createdAt: file.createdAt,
+            updatedAt: file.updatedAt,
+          });
+        }
+
 
         const root = {
           id: "root",
@@ -118,7 +150,7 @@ function Editor() {
 
               const parentFolder =
                 folderMap[
-                  folder.parent
+                folder.parent
                 ];
 
               if (parentFolder) {
@@ -190,10 +222,161 @@ function Editor() {
 
       } catch (error) {
 
-        console.error(
-          "Failed to load project structure:",
-          error
+        console.warn(
+          "Backend unavailable. Loading project structure from IndexedDB..."
         );
+
+        try {
+
+          const [
+            localFolders,
+            localFiles,
+          ] = await Promise.all([
+            getFoldersByProject(projectId),
+            getFilesByProject(projectId),
+          ]);
+
+          console.log(
+            "Offline folders:",
+            localFolders
+          );
+
+          console.log(
+            "Offline files:",
+            localFiles
+          );
+
+
+          const root = {
+            id: "root",
+            name: "Project",
+            type: "folder",
+            children: [],
+          };
+
+
+          /*
+           * Create folder nodes
+           */
+
+          const folderMap = {};
+
+
+          localFolders.forEach(
+            (folder) => {
+
+              folderMap[folder.id] = {
+                id: folder.id,
+                name: folder.name,
+                type: "folder",
+                children: [],
+              };
+
+            }
+          );
+
+
+          /*
+           * Build folder hierarchy
+           */
+
+          localFolders.forEach(
+            (folder) => {
+
+              const currentFolder =
+                folderMap[folder.id];
+
+
+              if (folder.parentId) {
+
+                const parentFolder =
+                  folderMap[
+                  folder.parentId
+                  ];
+
+
+                if (parentFolder) {
+
+                  parentFolder.children.push(
+                    currentFolder
+                  );
+
+                }
+
+              } else {
+
+                root.children.push(
+                  currentFolder
+                );
+
+              }
+
+            }
+          );
+
+
+          /*
+           * Add files
+           */
+
+          localFiles.forEach(
+            (file) => {
+
+              const fileNode = {
+                id: file.id,
+                name: file.name,
+                type: "file",
+              };
+
+
+              if (file.folderId) {
+
+                const parentFolder =
+                  folderMap[
+                  file.folderId
+                  ];
+
+
+                if (parentFolder) {
+
+                  parentFolder.children.push(
+                    fileNode
+                  );
+
+                } else {
+
+                  root.children.push(
+                    fileNode
+                  );
+
+                }
+
+              } else {
+
+                root.children.push(
+                  fileNode
+                );
+
+              }
+
+            }
+          );
+
+
+          setExplorer([root]);
+
+          console.log(
+            "Project structure loaded from IndexedDB"
+          );
+
+        } catch (offlineError) {
+
+          console.error(
+            "Failed to load project structure from IndexedDB:",
+            offlineError
+          );
+
+        }
 
       }
     };
@@ -258,44 +441,44 @@ function Editor() {
 
         {activePanel ===
           "explorer" && (
-          <Explorer />
-        )}
+            <Explorer />
+          )}
 
 
         {activePanel ===
           "search" && (
-          <SearchPanel />
-        )}
+            <SearchPanel />
+          )}
 
 
         {activePanel ===
           "git" && (
-          <GitPanel />
-        )}
+            <GitPanel />
+          )}
 
 
         {activePanel ===
           "run" && (
-          <RunPanel />
-        )}
+            <RunPanel />
+          )}
 
 
         {activePanel ===
           "debug" && (
-          <DebugPanel />
-        )}
+            <DebugPanel />
+          )}
 
 
         {activePanel ===
           "settings" && (
-          <SettingsPanel />
-        )}
+            <SettingsPanel />
+          )}
 
 
         {activePanel ===
           "profile" && (
-          <ProfilePanel />
-        )}
+            <ProfilePanel />
+          )}
 
 
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">

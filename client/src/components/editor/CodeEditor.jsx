@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { useEditor } from "../../context/EditorContext";
 import toast from "react-hot-toast";
+import {
+    getFileById,
+    saveFile as saveFileToIndexedDB,
+} from "../../database/indexedDB";
 
 const DEFAULT_EDITOR_SETTINGS = {
     theme: "dark",
@@ -147,6 +151,46 @@ function CodeEditor() {
             return false;
         }
 
+        /*
+         * Save to IndexedDB first.
+         * This makes the editor offline-first.
+         */
+
+        try {
+            const existingFile =
+                await getFileById(file.id);
+
+            await saveFileToIndexedDB({
+                ...(existingFile || {}),
+                id: file.id,
+                name: file.name,
+                content: content || "",
+            });
+
+            console.log(
+                "File saved to IndexedDB:",
+                currentFile
+            );
+
+        } catch (offlineSaveError) {
+
+            console.error(
+                "IndexedDB save failed:",
+                offlineSaveError
+            );
+
+            toast.error(
+                "Local save failed"
+            );
+
+            return false;
+        }
+
+
+        /*
+         * Try saving to backend.
+         */
+
         try {
             const token =
                 localStorage.getItem("token");
@@ -177,18 +221,15 @@ function CodeEditor() {
                 !response.ok ||
                 !data.success
             ) {
-                console.error(
-                    "Save failed:",
-                    data
-                );
-
-                toast.error(
+                throw new Error(
                     data.message ||
-                    "Save failed"
+                    "Backend save failed"
                 );
-
-                return false;
             }
+
+            /*
+             * Backend + IndexedDB saved
+             */
 
             setDirtyFiles((prev) =>
                 prev.filter(
@@ -206,60 +247,79 @@ function CodeEditor() {
             return true;
 
         } catch (error) {
-            console.error(
-                "Save error:",
-                error
+
+            /*
+             * Backend unavailable.
+             * IndexedDB already contains
+             * the latest content.
+             */
+
+            console.warn(
+                "Backend unavailable. File saved locally."
             );
 
-            toast.error(
-                "Unable to save file"
+            setDirtyFiles((prev) =>
+                prev.filter(
+                    (name) =>
+                        name !== currentFile
+                )
             );
 
-            return false;
+            setSaveStatus(
+                "Saved Locally"
+            );
+
+            if (showToast) {
+                toast.success(
+                    "Saved locally"
+                );
+            }
+
+            return true;
         }
     };
 
 
     /* Ctrl + S */
 
-    useEffect(() => {
-        const handleSave = async (e) => {
-            if (
-                !(
-                    e.ctrlKey &&
-                    e.key.toLowerCase() === "s"
-                )
-            ) {
-                return;
-            }
+    // useEffect(() => {
+    //     const handleSave = async (e) => {
+    //         if (
+    //             !(
+    //                 e.ctrlKey &&
+    //                 e.key.toLowerCase() === "s"
+    //             )
+    //         ) {
+    //             return;
+    //         }
 
-            e.preventDefault();
+    //         e.preventDefault();
 
-            const currentFile =
-                activeFileRef.current;
+    //         const currentFile =
+    //             activeFileRef.current;
 
-            const content =
-                filesRef.current[currentFile] ||
-                "";
+    //         const content =
+    //             filesRef.current[currentFile] ||
+    //             "";
 
-            await saveFile(
-                content,
-                true
-            );
-        };
+    //         await saveFile(
+    //             content,
+    //             true
+    //         );
+    //     };
 
-        window.addEventListener(
-            "keydown",
-            handleSave
-        );
+    //     window.addEventListener(
+    //         "keydown",
+    //         handleSave
+    //     );
 
-        return () => {
-            window.removeEventListener(
-                "keydown",
-                handleSave
-            );
-        };
-    }, []);
+    //     return () => {
+    //         window.removeEventListener(
+    //             "keydown",
+    //             handleSave
+    //         );
+    //     };
+    // }, []);
 
 
     /* Clear Auto Save Timer */
@@ -326,8 +386,25 @@ function CodeEditor() {
                     false,
             }}
 
-            onMount={(editor) => {
+            onMount={(editor, monaco) => {
                 setEditorInstance(editor);
+
+                editor.addCommand(
+                    monaco.KeyMod.CtrlCmd |
+                    monaco.KeyCode.KeyS,
+                    async () => {
+                        const currentFile =
+                            activeFileRef.current;
+
+                        const content =
+                            filesRef.current[currentFile] || "";
+
+                        await saveFile(
+                            content,
+                            true
+                        );
+                    }
+                );
             }}
 
             onChange={(value = "") => {

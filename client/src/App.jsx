@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import {
   BrowserRouter,
   Routes,
@@ -6,7 +8,7 @@ import {
 } from "react-router-dom";
 
 import ProtectedRoute from "./components/ProtectedRoute";
-
+import { initDB } from "./database/indexedDB";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
@@ -16,6 +18,9 @@ import Profile from "./pages/Profile";
 import Editor from "./pages/Editor";
 
 function App() {
+  useEffect(() => {
+    initDB();
+  }, []);
   return (
     <BrowserRouter>
 

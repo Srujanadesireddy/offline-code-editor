@@ -7,6 +7,11 @@ import {
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
+import {
+  deleteProject as deleteProjectFromIndexedDB,
+  addOperation,
+} from "../../database/indexedDB";
+
 function ProjectCard({
   project,
   onDeleted,
@@ -17,8 +22,11 @@ function ProjectCard({
     return null;
   }
 
+  const projectId =
+    project._id || project.id;
+
   const openProject = () => {
-    navigate(`/editor/${project._id}`);
+    navigate(`/editor/${projectId}`);
   };
 
   const deleteProject = async () => {
@@ -35,7 +43,7 @@ function ProjectCard({
         localStorage.getItem("token");
 
       const response = await fetch(
-        `http://localhost:5000/api/projects/${project._id}`,
+        `http://localhost:5000/api/projects/${projectId}`,
         {
           method: "DELETE",
 
@@ -52,19 +60,22 @@ function ProjectCard({
         !response.ok ||
         !data.success
       ) {
-        toast.error(
+        throw new Error(
           data.message ||
             "Failed to delete project"
         );
-
-        return;
       }
+
+      // Remove from IndexedDB
+      await deleteProjectFromIndexedDB(
+        projectId
+      );
 
       toast.success(
         "Project deleted successfully"
       );
 
-      onDeleted?.(project._id);
+      onDeleted?.(projectId);
 
     } catch (error) {
       console.error(
@@ -72,9 +83,38 @@ function ProjectCard({
         error
       );
 
-      toast.error(
-        "Unable to delete project"
-      );
+      // OFFLINE DELETE
+      try {
+        await deleteProjectFromIndexedDB(
+          projectId
+        );
+
+        await addOperation({
+          type: "DELETE_PROJECT",
+          entityId: projectId,
+          projectId: projectId,
+
+          data: {
+            name: project.name,
+          },
+        });
+
+        onDeleted?.(projectId);
+
+        toast.success(
+          "Project deleted offline"
+        );
+
+      } catch (offlineError) {
+        console.error(
+          "Offline project deletion error:",
+          offlineError
+        );
+
+        toast.error(
+          "Unable to delete project"
+        );
+      }
     }
   };
 
@@ -127,7 +167,6 @@ function ProjectCard({
 
         </div>
 
-
         {/* Actions */}
 
         <div className="flex items-center gap-3">
@@ -144,7 +183,6 @@ function ProjectCard({
             />
 
           </button>
-
 
           <button
             onClick={openProject}
