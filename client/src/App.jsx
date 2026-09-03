@@ -7,6 +7,11 @@ import {
   Navigate,
 } from "react-router-dom";
 
+import {
+  startSyncEngine,
+  stopSyncEngine,
+} from "./sync/syncEngine";
+
 import ProtectedRoute from "./components/ProtectedRoute";
 import { initDB } from "./database/indexedDB";
 import Login from "./pages/Login";
@@ -20,6 +25,12 @@ import Editor from "./pages/Editor";
 function App() {
   useEffect(() => {
     initDB();
+
+    startSyncEngine();
+
+    return () => {
+      stopSyncEngine();
+    };
   }, []);
   return (
     <BrowserRouter>
