@@ -7,6 +7,12 @@ import {
   getFoldersByProject,
   getFilesByProject,
 } from "../database/indexedDB";
+import {
+  connectCollaboration,
+  disconnectCollaboration,
+  joinProject,
+  leaveProject,
+} from "../collaboration/collaborationSocket";
 
 import TopBar from "../components/editor/TopBar";
 import Explorer from "../components/editor/Explorer";
@@ -31,6 +37,58 @@ function Editor() {
 
   const [showTerminal, setShowTerminal] =
     useState(false);
+
+  const [connectedUsers, setConnectedUsers] =
+    useState([]);
+
+  useEffect(() => {
+    if (!projectId) return;
+
+    const socket = connectCollaboration();
+
+    const handleProjectUsers = (users) => {
+      setConnectedUsers(users || []);
+    };
+
+    socket.on(
+      "project-users",
+      handleProjectUsers
+    );
+
+    const handleConnect = () => {
+      const storedUser = JSON.parse(
+        localStorage.getItem("user") || "{}"
+      );
+
+      const user = {
+        id: storedUser._id || storedUser.id || "unknown",
+        name: storedUser.name || storedUser.username || "User",
+      };
+
+      joinProject(projectId, user);
+    };
+
+    if (socket.connected) {
+      handleConnect();
+    } else {
+      socket.on("connect", handleConnect);
+    }
+
+    return () => {
+      leaveProject(projectId);
+
+      socket.off(
+        "project-users",
+        handleProjectUsers
+      );
+
+      socket.off("connect", handleConnect);
+
+      disconnectCollaboration();
+
+      setConnectedUsers([]);
+    };
+  }, [projectId]);
 
 
   useEffect(() => {
@@ -412,18 +470,12 @@ function Editor() {
 
       <TopBar
         activePanel={activePanel}
-        setActivePanel={
-          handlePanelChange
-        }
-        showTerminal={
-          showTerminal
-        }
-        setShowTerminal={
-          setShowTerminal
-        }
-        onTerminalToggle={
-          handleTerminalToggle
-        }
+        setActivePanel={handlePanelChange}
+        showTerminal={showTerminal}
+        setShowTerminal={setShowTerminal}
+        onTerminalToggle={handleTerminalToggle}
+        projectId={projectId}
+        connectedUsers={connectedUsers}
       />
 
 
@@ -484,7 +536,7 @@ function Editor() {
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
 
           <div className="flex-1 min-h-0">
-            <EditorArea />
+            <EditorArea projectId={projectId} />
           </div>
 
 

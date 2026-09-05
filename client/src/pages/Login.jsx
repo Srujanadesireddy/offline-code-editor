@@ -148,12 +148,12 @@ function Login() {
               className="w-full border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-right mt-2">
-              <a
-                href="#"
+              <Link
+                to="/forgot-password"
                 className="text-sm text-blue-600 hover:underline"
               >
                 Forgot Password?
-              </a>
+              </Link>
             </p>
           </div>
 

@@ -2,7 +2,7 @@ import EditorTabs from "./EditorTabs";
 import CodeEditor from "./CodeEditor";
 import Breadcrumb from "./Breadcrumb";
 
-function EditorArea() {
+function EditorArea({ projectId }) {
   return (
     <div className="flex-1 min-w-0 min-h-0 h-full flex flex-col bg-[#1e1e1e]">
 
@@ -17,7 +17,7 @@ function EditorArea() {
         </div>
 
         <div className="flex-1 min-h-0 h-full">
-          <CodeEditor />
+          <CodeEditor projectId={projectId} />
         </div>
 
       </div>

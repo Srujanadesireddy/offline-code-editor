@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, UserPlus, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
@@ -19,6 +19,10 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [joining, setJoining] = useState(false);
 
   const fetchProjects = async () => {
     try {
@@ -110,6 +114,82 @@ function Dashboard() {
     );
   };
 
+  const handleJoinProject = async () => {
+    const code = inviteCode.trim().toUpperCase();
+
+    if (!code) {
+      toast.error("Please enter an invite code");
+      return;
+    }
+
+    try {
+      setJoining(true);
+
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        "http://localhost:5000/api/projects/join",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            inviteCode: code,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message || "Failed to join project"
+        );
+      }
+
+      const joinedProject = data.project;
+
+      // Save joined project locally
+      await saveProject({
+        id: joinedProject._id,
+        name: joinedProject.name,
+        description: joinedProject.description || "",
+        owner: joinedProject.owner,
+        createdAt: joinedProject.createdAt,
+        updatedAt: joinedProject.updatedAt,
+      });
+
+      toast.success("Joined project successfully!");
+
+      setProjects((prev) => {
+        const exists = prev.some(
+          (project) =>
+            (project._id || project.id) === joinedProject._id
+        );
+
+        if (exists) {
+          return prev;
+        }
+
+        return [joinedProject, ...prev];
+      });
+
+      setInviteCode("");
+      setShowJoinModal(false);
+
+    } catch (error) {
+      console.error("Join project error:", error);
+
+      toast.error(
+        error.message || "Unable to join project"
+      );
+    } finally {
+      setJoining(false);
+    }
+  };
+
   const recentProjects = [...projects]
     .sort(
       (a, b) =>
@@ -151,14 +231,26 @@ function Dashboard() {
               </p>
             </div>
 
-            <button
-              onClick={() =>
-                navigate("/projects")
-              }
-              className="text-blue-400 hover:text-blue-300 font-medium transition"
-            >
-              View all →
-            </button>
+            <div className="flex items-center gap-4">
+
+              <button
+                onClick={() => setShowJoinModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition"
+              >
+                <UserPlus size={17} />
+                Join Project
+              </button>
+
+              <button
+                onClick={() =>
+                  navigate("/projects")
+                }
+                className="text-blue-400 hover:text-blue-300 font-medium transition"
+              >
+                View all →
+              </button>
+
+            </div>
 
           </div>
 
@@ -241,6 +333,91 @@ function Dashboard() {
             )}
 
         </main>
+
+        {showJoinModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+
+            <div className="w-full max-w-md bg-[#252526] border border-slate-700 rounded-xl shadow-2xl p-6">
+
+              {/* Header */}
+
+              <div className="flex items-center justify-between mb-5">
+
+                <div>
+                  <h2 className="text-xl font-semibold text-white">
+                    Join Project
+                  </h2>
+
+                  <p className="text-sm text-slate-400 mt-1">
+                    Enter the invite code shared by the project owner.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowJoinModal(false);
+                    setInviteCode("");
+                  }}
+                  className="text-slate-400 hover:text-white transition"
+                >
+                  <X size={20} />
+                </button>
+
+              </div>
+
+              {/* Input */}
+
+              <label className="block text-sm text-slate-300 mb-2">
+                Invite Code
+              </label>
+
+              <input
+                type="text"
+                value={inviteCode}
+                onChange={(e) =>
+                  setInviteCode(
+                    e.target.value.toUpperCase()
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleJoinProject();
+                  }
+                }}
+                placeholder="Enter invite code"
+                maxLength={8}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white font-mono tracking-widest outline-none focus:border-blue-500"
+                autoFocus
+              />
+
+              {/* Buttons */}
+
+              <div className="flex justify-end gap-3 mt-6">
+
+                <button
+                  onClick={() => {
+                    setShowJoinModal(false);
+                    setInviteCode("");
+                  }}
+                  className="px-4 py-2 text-slate-300 hover:text-white transition"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={handleJoinProject}
+                  disabled={joining || !inviteCode.trim()}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition"
+                >
+                  {joining ? "Joining..." : "Join Project"}
+                </button>
+
+              </div>
+
+            </div>
+
+          </div>
+        )}
 
       </div>
 

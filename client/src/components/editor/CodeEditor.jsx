@@ -3,6 +3,10 @@ import Editor from "@monaco-editor/react";
 import { useEditor } from "../../context/EditorContext";
 import toast from "react-hot-toast";
 import {
+    connectCollaboration,
+    getCollaborationSocket,
+} from "../../collaboration/collaborationSocket";
+import {
     getFileById,
     saveFile as saveFileToIndexedDB,
 } from "../../database/indexedDB";
@@ -14,7 +18,7 @@ const DEFAULT_EDITOR_SETTINGS = {
     minimap: true,
 };
 
-function CodeEditor() {
+function CodeEditor({ projectId }) {
     const {
         activeFile,
         files,
@@ -48,6 +52,8 @@ function CodeEditor() {
     });
 
     const timer = useRef(null);
+    const isApplyingRemoteChange = useRef(false);
+    const editorRef = useRef(null);
 
     const activeFileRef = useRef(activeFile);
     const filesRef = useRef(files);
@@ -58,6 +64,97 @@ function CodeEditor() {
         filesRef.current = files;
         explorerRef.current = explorer;
     }, [activeFile, files, explorer]);
+
+    useEffect(() => {
+        const socket = connectCollaboration();
+
+        if (!socket) return;
+
+        const handleFileChange = ({
+            fileId,
+            content,
+        }) => {
+            const currentFile =
+                activeFileRef.current;
+
+            const currentExplorer =
+                explorerRef.current;
+
+            if (!fileId || !currentFile) {
+                return;
+            }
+
+            const findFileById = (tree) => {
+                for (const node of tree) {
+                    if (
+                        node.type === "file" &&
+                        node.id === fileId
+                    ) {
+                        return node;
+                    }
+
+                    if (node.children) {
+                        const found =
+                            findFileById(
+                                node.children
+                            );
+
+                        if (found) {
+                            return found;
+                        }
+                    }
+                }
+
+                return null;
+            };
+
+            const file = findFileById(
+                currentExplorer
+            );
+
+            if (!file || file.name !== currentFile) {
+                return;
+            }
+
+            console.log(
+                "📥 Remote change received:",
+                fileId
+            );
+
+            const newContent = content || "";
+
+            // Update React state
+            setFiles((prev) => ({
+                ...prev,
+                [currentFile]: newContent,
+            }));
+
+            // Update Monaco directly
+            if (editorRef.current) {
+                isApplyingRemoteChange.current = true;
+
+                editorRef.current.setValue(
+                    newContent
+                );
+
+                setTimeout(() => {
+                    isApplyingRemoteChange.current = false;
+                }, 0);
+            }
+        };
+
+        socket.on(
+            "file-change",
+            handleFileChange
+        );
+
+        return () => {
+            socket.off(
+                "file-change",
+                handleFileChange
+            );
+        };
+    }, []);
 
 
     /*
@@ -387,6 +484,8 @@ function CodeEditor() {
             }}
 
             onMount={(editor, monaco) => {
+                editorRef.current = editor;
+
                 setEditorInstance(editor);
 
                 editor.addCommand(
@@ -408,10 +507,50 @@ function CodeEditor() {
             }}
 
             onChange={(value = "") => {
+                if (isApplyingRemoteChange.current) {
+                    return;
+                }
+
+                const currentFile =
+                    activeFileRef.current;
+
+                const currentExplorer =
+                    explorerRef.current;
+
                 setFiles((prev) => ({
                     ...prev,
                     [activeFile]: value,
                 }));
+
+                // Send change to other collaborators
+                const socket =
+                    getCollaborationSocket();
+
+                const file = findFile(
+                    currentExplorer,
+                    currentFile
+                );
+
+                if (
+                    socket?.connected &&
+                    file?.id
+                ) {
+
+                    console.log("📤 SENDING:", {
+                        projectId,
+                        fileId: file.id,
+                        content: value,
+                    });
+                    
+                    socket.emit(
+                        "file-change",
+                        {
+                            projectId,
+                            fileId: file.id,
+                            content: value,
+                        }
+                    );
+                }
 
                 if (
                     !dirtyFiles.includes(

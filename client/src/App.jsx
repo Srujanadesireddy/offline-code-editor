@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import ForgotPassword from "./pages/ForgotPassword";
 
 import {
   BrowserRouter,
@@ -47,6 +48,11 @@ function App() {
         <Route
           path="/register"
           element={<Register />}
+        />
+
+        <Route
+          path="/forgot-password"
+          element={<ForgotPassword />}
         />
 
 

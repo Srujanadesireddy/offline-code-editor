@@ -1,6 +1,7 @@
 const Project = require("../models/Project");
 const File = require("../models/File");
 const Folder = require("../models/Folder");
+const crypto = require("crypto");
 
 exports.createProject = async (req, res) => {
     try {
@@ -78,7 +79,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 exports.getProjects = async (req, res) => {
     try {
         const projects = await Project.find({
-            owner: req.user.id,
+            $or: [
+                { owner: req.user.id },
+                { members: req.user.id },
+            ],
         }).sort({
             updatedAt: -1,
         });
@@ -142,6 +146,105 @@ exports.deleteProject = async (req, res) => {
             "Delete project error:",
             error
         );
+
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};
+
+exports.shareProject = async (req, res) => {
+    try {
+        const project = await Project.findOne({
+            _id: req.params.id,
+            owner: req.user.id,
+        });
+
+        if (!project) {
+            return res.status(404).json({
+                success: false,
+                message: "Project not found or you are not the owner",
+            });
+        }
+
+        if (!project.inviteCode) {
+            project.inviteCode = crypto
+                .randomBytes(4)
+                .toString("hex")
+                .toUpperCase();
+
+            await project.save();
+        }
+
+        res.status(200).json({
+            success: true,
+            inviteCode: project.inviteCode,
+            project: {
+                id: project._id,
+                name: project.name,
+            },
+        });
+
+    } catch (error) {
+        console.error("Share project error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};
+
+
+exports.joinProject = async (req, res) => {
+    try {
+        const { inviteCode } = req.body;
+
+        if (!inviteCode) {
+            return res.status(400).json({
+                success: false,
+                message: "Invite code is required",
+            });
+        }
+
+        const project = await Project.findOne({
+            inviteCode: inviteCode.trim().toUpperCase(),
+        });
+
+        if (!project) {
+            return res.status(404).json({
+                success: false,
+                message: "Invalid invite code",
+            });
+        }
+
+        const userId = req.user.id.toString();
+
+        const isOwner =
+            project.owner.toString() === userId;
+
+        const alreadyMember =
+            project.members.some(
+                (member) =>
+                    member.toString() === userId
+            );
+
+        if (!isOwner && !alreadyMember) {
+            project.members.push(req.user.id);
+            await project.save();
+        }
+
+        res.status(200).json({
+            success: true,
+            message: isOwner
+                ? "You are the project owner"
+                : "Joined project successfully",
+            project,
+        });
+
+    } catch (error) {
+        console.error("Join project error:", error);
 
         res.status(500).json({
             success: false,

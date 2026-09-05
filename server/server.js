@@ -1,3 +1,7 @@
+const http = require("http");
+const { Server } = require("socket.io");
+const { setupCollaboration } = require("./collaboration/collaboration");
+
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -28,6 +32,17 @@ app.get("/api/test", (req, res) => {
 
 connectDB();
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+const httpServer = http.createServer(app);
+
+const io = new Server(httpServer, {
+    cors: {
+        origin: "http://localhost:5173",
+        methods: ["GET", "POST"],
+    },
+});
+
+setupCollaboration(io);
+
+httpServer.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
