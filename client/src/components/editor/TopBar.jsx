@@ -4,6 +4,7 @@ import {
   FilePlus,
   FolderPlus,
   Save,
+  History,
   X,
   Undo2,
   Redo2,
@@ -27,6 +28,7 @@ function TopBar({
   onTerminalToggle,
   projectId,
   connectedUsers,
+  onHistoryToggle,
 }) {
   const {
     editorInstance,
@@ -601,6 +603,14 @@ function TopBar({
         >
           <Users size={15} />
           Share
+        </button>
+
+        <button
+          onClick={onHistoryToggle}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-white text-sm transition"
+        >
+          <History size={15} />
+          History
         </button>
 
         {openMenu === "share" && (

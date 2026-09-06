@@ -1,4 +1,5 @@
 const File = require("../models/File");
+const FileVersion = require("../models/FileVersion");
 
 exports.createFile = async (req, res) => {
   try {
@@ -90,6 +91,8 @@ exports.getFile = async (req, res) => {
 exports.updateFile = async (req, res) => {
   try {
 
+    console.log("🔥 updateFile CALLED:", req.params.id);
+
     const { content } = req.body;
 
     const file = await File.findByIdAndUpdate(
@@ -105,6 +108,21 @@ exports.updateFile = async (req, res) => {
       });
     }
 
+    const lastVersion = await FileVersion.findOne({
+      file: file._id,
+    }).sort({ versionNumber: -1 });
+
+    const nextVersion = lastVersion
+      ? lastVersion.versionNumber + 1
+      : 1;
+
+    await FileVersion.create({
+      file: file._id,
+      content: file.content,
+      versionNumber: nextVersion,
+      createdBy: req.user.id,
+    });
+
     res.status(200).json({
       success: true,
       message: "File updated successfully",
@@ -112,12 +130,12 @@ exports.updateFile = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("Update file error:", error);
 
     res.status(500).json({
       success: false,
       message: error.message,
     });
-
   }
 };
 
@@ -209,6 +227,53 @@ exports.moveFile = async (req, res) => {
     });
 
   } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.getFileVersions = async (req, res) => {
+  try {
+    const versions = await FileVersion.find({
+      file: req.params.id,
+    })
+      .sort({ versionNumber: -1 })
+      .populate("createdBy", "name email");
+
+    res.status(200).json({
+      success: true,
+      versions,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.deleteFileVersion = async (req, res) => {
+  try {
+    const version = await FileVersion.findByIdAndDelete(
+      req.params.versionId
+    );
+
+    if (!version) {
+      return res.status(404).json({
+        success: false,
+        message: "Version not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Version deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete version error:", error);
+
     res.status(500).json({
       success: false,
       message: error.message,

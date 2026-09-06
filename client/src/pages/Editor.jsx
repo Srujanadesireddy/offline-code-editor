@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useEditor } from "../context/EditorContext";
+import VersionHistory from "../components/editor/VersionHistory";
 import {
   saveFolder,
   saveFile,
@@ -36,6 +37,9 @@ function Editor() {
     useState("explorer");
 
   const [showTerminal, setShowTerminal] =
+    useState(false);
+
+  const [showHistory, setShowHistory] =
     useState(false);
 
   const [connectedUsers, setConnectedUsers] =
@@ -476,6 +480,7 @@ function Editor() {
         onTerminalToggle={handleTerminalToggle}
         projectId={projectId}
         connectedUsers={connectedUsers}
+        onHistoryToggle={() => setShowHistory((prev) => !prev)}
       />
 
 
@@ -535,8 +540,16 @@ function Editor() {
 
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
 
-          <div className="flex-1 min-h-0">
-            <EditorArea projectId={projectId} />
+          <div className="flex-1 min-h-0 flex">
+            <div className="flex-1 min-w-0">
+              <EditorArea projectId={projectId} />
+            </div>
+
+            {showHistory && (
+              <div className="w-72 flex-shrink-0">
+                <VersionHistory />
+              </div>
+            )}
           </div>
 
 
