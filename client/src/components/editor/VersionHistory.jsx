@@ -44,6 +44,11 @@ function VersionHistory() {
         }
 
         const fetchVersions = async () => {
+            if (!navigator.onLine) {
+                setLoading(false);
+                return;
+            }
+
             try {
                 setLoading(true);
 
