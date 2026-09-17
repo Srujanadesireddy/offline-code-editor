@@ -469,3 +469,29 @@ export const deleteOperation = async (operationId) => {
         };
     });
 };
+
+
+// Update an existing offline operation
+export const updateOperation = async (operation) => {
+    const db = await initDB();
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(
+            "operations",
+            "readwrite"
+        );
+
+        const store =
+            transaction.objectStore("operations");
+
+        const request = store.put(operation);
+
+        request.onsuccess = () => {
+            resolve(operation);
+        };
+
+        request.onerror = () => {
+            reject(request.error);
+        };
+    });
+};

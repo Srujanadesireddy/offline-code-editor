@@ -9,6 +9,10 @@ import {
 import {
     getFileById,
     saveFile as saveFileToIndexedDB,
+    getOperations,
+    addOperation,
+    updateOperation,
+    deleteOperation,
 } from "../../database/indexedDB";
 
 const DEFAULT_EDITOR_SETTINGS = {
@@ -285,6 +289,85 @@ function CodeEditor({ projectId }) {
 
 
         /*
+         * Helper to queue or update an UPDATE_FILE operation in IndexedDB.
+         * Limited to the same file to prevent duplicate operations.
+         */
+        const queueOfflineUpdate = async () => {
+            try {
+                const operations = await getOperations();
+                const existingOp = operations.find(
+                    (op) =>
+                        op.type === "UPDATE_FILE" &&
+                        op.entityId === file.id
+                );
+
+                if (existingOp) {
+                    await updateOperation({
+                        ...existingOp,
+                        data: {
+                            ...existingOp.data,
+                            content: content || "",
+                            name: file.name,
+                        },
+                        updatedAt: new Date().toISOString(),
+                    });
+
+                    console.log(
+                        "Updated existing UPDATE_FILE operation in queue:",
+                        file.id
+                    );
+                } else {
+                    await addOperation({
+                        type: "UPDATE_FILE",
+                        entityId: file.id,
+                        projectId: file.projectId || projectId,
+                        data: {
+                            content: content || "",
+                            name: file.name,
+                        },
+                    });
+
+                    console.log(
+                        "Queued new UPDATE_FILE operation:",
+                        file.id
+                    );
+                }
+            } catch (opError) {
+                console.error(
+                    "Failed to queue UPDATE_FILE operation:",
+                    opError
+                );
+            }
+        };
+
+        /*
+         * If offline, queue UPDATE_FILE without sending
+         * an unnecessary failed backend request.
+         */
+        if (!navigator.onLine) {
+            await queueOfflineUpdate();
+
+            setDirtyFiles((prev) =>
+                prev.filter(
+                    (name) =>
+                        name !== currentFile
+                )
+            );
+
+            setSaveStatus(
+                "Saved Locally"
+            );
+
+            if (showToast) {
+                toast.success(
+                    "Saved locally"
+                );
+            }
+
+            return true;
+        }
+
+        /*
          * Try saving to backend.
          */
 
@@ -328,6 +411,24 @@ function CodeEditor({ projectId }) {
              * Backend + IndexedDB saved
              */
 
+            try {
+                const operations = await getOperations();
+                const pendingOp = operations.find(
+                    (op) =>
+                        op.type === "UPDATE_FILE" &&
+                        op.entityId === file.id
+                );
+
+                if (pendingOp) {
+                    await deleteOperation(pendingOp.id);
+                }
+            } catch (cleanupError) {
+                console.warn(
+                    "Failed to clean up pending operation:",
+                    cleanupError
+                );
+            }
+
             setDirtyFiles((prev) =>
                 prev.filter(
                     (name) =>
@@ -347,13 +448,14 @@ function CodeEditor({ projectId }) {
 
             /*
              * Backend unavailable.
-             * IndexedDB already contains
-             * the latest content.
+             * Queue UPDATE_FILE operation and save locally.
              */
 
             console.warn(
                 "Backend unavailable. File saved locally."
             );
+
+            await queueOfflineUpdate();
 
             setDirtyFiles((prev) =>
                 prev.filter(

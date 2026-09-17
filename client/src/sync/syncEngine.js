@@ -535,6 +535,40 @@ const syncMoveFile = async (operation) => {
 
 
 // ======================================================
+// UPDATE FILE
+// ======================================================
+
+const syncUpdateFile = async (operation) => {
+    const fileId = resolveId(
+        operation.entityId
+    );
+
+    if (fileId.startsWith("local-")) {
+        throw new Error(
+            `File ${fileId} has not been synced yet`
+        );
+    }
+
+    const response = await apiRequest(
+        `/api/files/${fileId}`,
+        {
+            method: "PUT",
+            body: JSON.stringify({
+                content: operation.data?.content ?? "",
+            }),
+        }
+    );
+
+    console.log(
+        "File updated on server:",
+        fileId
+    );
+
+    return response;
+};
+
+
+// ======================================================
 // PROCESS ONE OPERATION
 // ======================================================
 
@@ -588,6 +622,11 @@ const processOperation = async (operation) => {
 
         case "MOVE_FILE":
             return await syncMoveFile(
+                operation
+            );
+
+        case "UPDATE_FILE":
+            return await syncUpdateFile(
                 operation
             );
 
